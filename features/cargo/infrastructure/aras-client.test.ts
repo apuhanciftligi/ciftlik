@@ -24,6 +24,10 @@ const order = {
   cityName: "Ankara",
   townName: "Çankaya",
   quarterName: null,
+  pieces: [
+    { barcodeNumber: "2608180047701", description: "Koli 1/2" },
+    { barcodeNumber: "2608180047702", description: "Koli 2/2" },
+  ],
 };
 
 function reply(body: string, status = 200) {
@@ -55,6 +59,32 @@ describe("sendArasOrder", () => {
     expect(body).toContain("<ReceiverAddress>Kızılay Mah. &lt;Blok A&gt;</ReceiverAddress>");
     expect(body).toContain("<Password>p&amp;ss&lt;1&gt;</Password>");
     expect(body).not.toContain("ReceiverQuarterName");
+  });
+
+  it("sends one PieceDetail per parcel, in the WSDL's field order", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      reply(
+        "<SetOrderResponse><SetOrderResult><OrderResultInfo><ResultCode>0</ResultCode></OrderResultInfo></SetOrderResult></SetOrderResponse>",
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await sendArasOrder(creds, order);
+
+    const body = String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body);
+    expect(body).toContain("<PieceCount>2</PieceCount>");
+    expect(body).toContain(
+      "<PieceDetails>" +
+        "<PieceDetail><VolumetricWeight>1</VolumetricWeight><Weight>1</Weight><BarcodeNumber>2608180047701</BarcodeNumber><Description>Koli 1/2</Description></PieceDetail>" +
+        "<PieceDetail><VolumetricWeight>1</VolumetricWeight><Weight>1</Weight><BarcodeNumber>2608180047702</BarcodeNumber><Description>Koli 2/2</Description></PieceDetail>" +
+        "</PieceDetails>",
+    );
+    // Order's sequence: …ReceiverTownName, …PieceCount, …IntegrationCode, …IsWorldWide, …PieceDetails.
+    const at = (tag: string) => body.indexOf(`<${tag}>`);
+    expect(at("ReceiverTownName")).toBeLessThan(at("PieceCount"));
+    expect(at("PieceCount")).toBeLessThan(at("IntegrationCode"));
+    expect(at("IsWorldWide")).toBeLessThan(at("PieceDetails"));
+    expect(at("PieceDetails")).toBeLessThan(body.indexOf("</Order>"));
   });
 
   it("passes Aras's rejection message through", async () => {

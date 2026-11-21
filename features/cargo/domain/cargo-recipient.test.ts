@@ -18,6 +18,7 @@ describe("composeCargoRecipient", () => {
       address: "Atatürk Mah. 5. Sok. No:3 D:2, Battalgazi / Malatya",
       addressNote: null,
       arasCode: null,
+      arasPieceCount: null,
     });
   });
 
@@ -49,6 +50,7 @@ describe("composeCargoRecipient", () => {
       address: "—",
       addressNote: null,
       arasCode: null,
+      arasPieceCount: null,
     });
   });
 

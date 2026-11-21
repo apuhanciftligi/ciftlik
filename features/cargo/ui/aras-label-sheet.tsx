@@ -1,9 +1,11 @@
 /**
- * The Aras Kargo parcel label, laid out like Aras's dummy label template
+ * One Aras Kargo parcel label, laid out like Aras's dummy label template
  * (SetOrder doc Şekil 1), minus the bottom "DİKKAT! … Sipariş Bazlı" note,
- * which Aras asked us to drop (our account is set up as "Parça Bazlı"). Sized in millimetres for a 100×100
- * mm label (thermal printer or cut from A4) and styled inline, not with the
- * admin theme: it must print the same black-on-white everywhere.
+ * which Aras asked us to drop (our account is set up as "Parça Bazlı"). The
+ * barcode is the parcel's own barcode, the one sent to Aras as
+ * PieceDetail.BarcodeNumber. Sized in millimetres for a 100×100 mm label
+ * (thermal printer or cut from A4) and styled inline, not with the admin
+ * theme: it must print the same black-on-white everywhere.
  */
 import { code128Widths } from "@/features/cargo/domain/code128";
 
@@ -53,6 +55,7 @@ export function ArasLabelSheet({ label }: { label: ArasLabel }) {
       style={{
         width: "100mm",
         height: "100mm",
+        flexShrink: 0,
         boxSizing: "border-box",
         border: BORDER,
         background: "#fff",
@@ -91,7 +94,10 @@ export function ArasLabelSheet({ label }: { label: ArasLabel }) {
         </div>
       </div>
 
-      <div style={{ ...cell, ...caption }}>Standart Kargo</div>
+      <div style={{ ...cell, ...caption, display: "flex", justifyContent: "space-between" }}>
+        <span>Standart Kargo</span>
+        <span style={{ ...value, color: "#000" }}>{label.piece}</span>
+      </div>
 
       <div style={{ ...cell, ...caption }}>
         Entegrasyon Kodu : <span style={{ ...value, color: "#000" }}>{label.integrationCode}</span>
@@ -108,7 +114,7 @@ export function ArasLabelSheet({ label }: { label: ArasLabel }) {
           justifyContent: "center",
         }}
       >
-        <Barcode code={label.integrationCode} />
+        <Barcode code={label.barcode} />
         <div
           style={{
             textAlign: "center",
@@ -118,10 +124,9 @@ export function ArasLabelSheet({ label }: { label: ArasLabel }) {
             marginTop: "0.8mm",
           }}
         >
-          {label.integrationCode}
+          {label.barcode}
         </div>
       </div>
-
     </div>
   );
 }

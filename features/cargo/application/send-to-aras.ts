@@ -10,22 +10,35 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { cancelArasShipmentAs, sendOrderToArasAs } from "@/features/cargo/application/aras";
+import { ARAS_MAX_PIECES } from "@/features/cargo/domain/aras-order";
 import { assertAdmin } from "@/features/auth/application/assert-admin";
 
 const inputSchema = z.object({ order_id: z.string().uuid() });
+const sendInputSchema = inputSchema.extend({
+  piece_count: z.coerce.number().int().min(1).max(ARAS_MAX_PIECES),
+});
 
 export type SendToArasActionState =
   | { status: "success"; integrationCode: string }
   | { status: "error"; message: string };
 
 export async function sendOrderToArasAction(input: unknown): Promise<SendToArasActionState> {
-  const parsed = inputSchema.safeParse(input);
-  if (!parsed.success) return { status: "error", message: "Geçersiz sipariş." };
+  const parsed = sendInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: `Geçersiz istek. Koli sayısı 1 ile ${ARAS_MAX_PIECES} arasında olmalı.`,
+    };
+  }
 
   const admin = await assertAdmin();
   if (!admin.ok) return { status: "error", message: admin.error.message };
 
-  const result = await sendOrderToArasAs(admin.value, parsed.data.order_id);
+  const result = await sendOrderToArasAs(
+    admin.value,
+    parsed.data.order_id,
+    parsed.data.piece_count,
+  );
   if (!result.ok) return { status: "error", message: result.error.message };
 
   revalidatePath("/kargo");

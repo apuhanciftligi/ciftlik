@@ -4,6 +4,7 @@ import {
   arasCancelOutcome,
   arasIntegrationCode,
   arasPhone,
+  arasPieceBarcode,
   arasTrackingUrl,
   buildArasOrder,
 } from "@/features/cargo/domain/aras-order";
@@ -58,6 +59,7 @@ describe("buildArasOrder", () => {
       lastName: " Yılmaz ",
       phone: "+905321234567",
       snapshot,
+      pieceCount: 2,
     });
     expect(result).toEqual({
       ok: true,
@@ -70,8 +72,26 @@ describe("buildArasOrder", () => {
         cityName: "Ankara",
         townName: "Çankaya",
         quarterName: "Kızılay",
+        pieces: [
+          { barcodeNumber: "2608180047701", description: "Koli 1/2" },
+          { barcodeNumber: "2608180047702", description: "Koli 2/2" },
+        ],
       },
     });
+  });
+
+  it("rejects a parcel count outside 1–20", () => {
+    for (const pieceCount of [0, 21, 1.5]) {
+      const result = buildArasOrder({
+        orderNumber: "260818-K-00477",
+        firstName: "Ayşe",
+        lastName: "Yılmaz",
+        phone: "+905321234567",
+        snapshot,
+        pieceCount,
+      });
+      expect(result.ok).toBe(false);
+    }
   });
 
   it("composes the address from its parts when raw_text is empty", () => {
@@ -81,6 +101,7 @@ describe("buildArasOrder", () => {
       lastName: "Yılmaz",
       phone: "+905321234567",
       snapshot: { ...snapshot, raw_text: "" },
+      pieceCount: 1,
     });
     expect(result.ok && result.value.receiverAddress).toBe(
       "Kızılay Atatürk Cad. No: 12 Daire: 3",
@@ -94,6 +115,7 @@ describe("buildArasOrder", () => {
       lastName: "B".repeat(80),
       phone: "+905321234567",
       snapshot: { ...snapshot, raw_text: "x".repeat(400), district: "Ç".repeat(40) },
+      pieceCount: 1,
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -109,11 +131,19 @@ describe("buildArasOrder", () => {
       lastName: "Yılmaz",
       phone: null,
       snapshot: { raw_text: "Bir yer" },
+      pieceCount: 1,
     });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe("VALIDATION_ERROR");
     expect(result.error.message).toBe("Aras'a gönderilemedi, eksik bilgi: telefon, il, ilçe.");
+  });
+});
+
+describe("arasPieceBarcode", () => {
+  it("appends a two-digit parcel number to the integration code", () => {
+    expect(arasPieceBarcode("26081800477", 1)).toBe("2608180047701");
+    expect(arasPieceBarcode("26081800477", 12)).toBe("2608180047712");
   });
 });
 

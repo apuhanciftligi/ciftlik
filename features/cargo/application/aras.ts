@@ -9,7 +9,7 @@ import "server-only";
  * send-to-aras.ts checks admin first). It is not in a "use server" file on
  * purpose: every export there is publicly callable.
  */
-import { composeArasLabel, type ArasLabel } from "@/features/cargo/domain/aras-label";
+import { composeArasLabels, type ArasLabel } from "@/features/cargo/domain/aras-label";
 import {
   arasCancelOutcome,
   arasTrackingUrl,
@@ -53,6 +53,7 @@ export function isArasEnabled(): boolean {
 export async function sendOrderToArasAs(
   actor: { readonly id: string },
   orderId: string,
+  pieceCount: number,
 ): Promise<Result<{ integrationCode: string }, AppError>> {
   const creds = arasCreds();
   if (!creds) {
@@ -76,7 +77,7 @@ export async function sendOrderToArasAs(
     );
   }
 
-  const order = buildArasOrder(source.value);
+  const order = buildArasOrder({ ...source.value, pieceCount });
   if (!order.ok) return order;
 
   const sent = await sendArasOrder(creds, order.value);
@@ -97,6 +98,7 @@ export async function sendOrderToArasAs(
   const marked = await markOrderSentToAras({
     orderId,
     integrationCode,
+    pieceCount,
     trackingUrl: accountId ? arasTrackingUrl(accountId, integrationCode) : null,
   });
   if (!marked.ok) {
@@ -114,28 +116,42 @@ export async function sendOrderToArasAs(
     action: "order.sent_to_aras",
     entity_type: "order",
     entity_id: orderId,
-    before: { aras_integration_code: source.value.arasIntegrationCode },
-    after: { aras_integration_code: integrationCode },
+    before: {
+      aras_integration_code: source.value.arasIntegrationCode,
+      aras_piece_count: source.value.arasPieceCount,
+    },
+    after: { aras_integration_code: integrationCode, aras_piece_count: pieceCount },
     metadata: { test_mode: creds.testMode },
   });
 
   return ok({ integrationCode });
 }
 
-/** The printable Aras label for an order that has been sent to Aras. */
-export async function getArasLabel(orderId: string): Promise<Result<ArasLabel, AppError>> {
+/** The printable Aras labels (one per parcel) of an order sent to Aras. */
+export async function getArasLabels(orderId: string): Promise<Result<ArasLabel[], AppError>> {
   const source = await fetchArasShipmentSource(orderId);
   if (!source.ok) return source;
-  if (!source.value.arasIntegrationCode) {
+  const { arasIntegrationCode, arasPieceCount } = source.value;
+  if (!arasIntegrationCode) {
     return err(
       new InvalidTransitionError({
         message: "Bu sipariş henüz Aras'a gönderilmedi. Önce \"Aras'a Gönder\"e basın.",
       }),
     );
   }
+  if (arasPieceCount === null) {
+    // Sent before we sent parcels: Aras has no barcode a label could carry.
+    return err(
+      new InvalidTransitionError({
+        message:
+          "Bu sipariş eski yöntemle (koli bilgisi olmadan) gönderilmiş; şube etiketini tanımaz. \"Aras'a tekrar gönder\"e basıp etiketi yeniden yazdırın.",
+      }),
+    );
+  }
   return ok(
-    composeArasLabel({
-      integrationCode: source.value.arasIntegrationCode,
+    composeArasLabels({
+      integrationCode: arasIntegrationCode,
+      pieceCount: arasPieceCount,
       firstName: source.value.firstName,
       lastName: source.value.lastName,
       printedAt: new Date(),

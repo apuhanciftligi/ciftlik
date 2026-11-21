@@ -32,7 +32,7 @@ export async function fetchCargoRecipients(
   const { data, error } = await (supabase as any)
     .from("orders")
     .select(
-      "id, delivery_address_snapshot, aras_integration_code, customers!inner(first_name, last_name, phone)",
+      "id, delivery_address_snapshot, aras_integration_code, aras_piece_count, customers!inner(first_name, last_name, phone)",
     )
     .in("id", orderIds as string[]);
 
@@ -45,6 +45,7 @@ export async function fetchCargoRecipients(
     id: string;
     delivery_address_snapshot: unknown;
     aras_integration_code: unknown;
+    aras_piece_count: unknown;
     customers: EmbeddedCustomer;
   }>) {
     // PostgREST returns the embedded to-one as an object, but tolerate an array.
@@ -60,6 +61,7 @@ export async function fetchCargoRecipients(
         phone: customer?.phone,
         snapshot: row.delivery_address_snapshot,
         arasCode: row.aras_integration_code,
+        arasPieceCount: row.aras_piece_count,
       }),
     );
   }

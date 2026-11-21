@@ -69,6 +69,7 @@ export function CargoOrderTable({
                   <SendToArasButton
                     orderId={order.id}
                     alreadySent={Boolean(recipients[order.id]?.arasCode)}
+                    pieceCount={recipients[order.id]?.arasPieceCount ?? null}
                   />
                 ) : null}
                 <ArasLabelLink orderId={order.id} recipient={recipients[order.id]} />
@@ -132,6 +133,7 @@ export function CargoOrderTable({
                       <SendToArasButton
                         orderId={order.id}
                         alreadySent={Boolean(recipients[order.id]?.arasCode)}
+                        pieceCount={recipients[order.id]?.arasPieceCount ?? null}
                       />
                     ) : null}
                     <ArasLabelLink orderId={order.id} recipient={recipients[order.id]} />
