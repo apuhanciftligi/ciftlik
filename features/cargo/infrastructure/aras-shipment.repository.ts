@@ -28,6 +28,7 @@ const sourceRowSchema = z.object({
   fulfillment_channel: z.string(),
   delivery_address_snapshot: z.unknown(),
   aras_integration_code: z.string().nullable(),
+  aras_piece_count: z.number().int().nullable(),
   // PostgREST returns the embedded to-one as an object, but tolerate an array.
   customers: z.union([customerSchema, z.array(customerSchema).min(1)]),
 });
@@ -38,6 +39,8 @@ export interface ArasShipmentSource {
   readonly fulfillmentChannel: string;
   readonly snapshot: unknown;
   readonly arasIntegrationCode: string | null;
+  /** Parcels the order was sent with; null if unsent or sent before pieces. */
+  readonly arasPieceCount: number | null;
   readonly firstName: unknown;
   readonly lastName: unknown;
   readonly phone: unknown;
@@ -51,7 +54,7 @@ export async function fetchArasShipmentSource(
   const { data, error } = await (supabase as any)
     .from("orders")
     .select(
-      "order_number, status, fulfillment_channel, delivery_address_snapshot, aras_integration_code, customers!inner(first_name, last_name, phone)",
+      "order_number, status, fulfillment_channel, delivery_address_snapshot, aras_integration_code, aras_piece_count, customers!inner(first_name, last_name, phone)",
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -77,6 +80,7 @@ export async function fetchArasShipmentSource(
     fulfillmentChannel: row.data.fulfillment_channel,
     snapshot: row.data.delivery_address_snapshot,
     arasIntegrationCode: row.data.aras_integration_code,
+    arasPieceCount: row.data.aras_piece_count,
     firstName: customer?.first_name,
     lastName: customer?.last_name,
     phone: customer?.phone,
@@ -84,18 +88,21 @@ export async function fetchArasShipmentSource(
 }
 
 /**
- * Record a successful SetOrder: the Aras code, when it was sent, the carrier
+ * Record a successful SetOrder: the Aras code, the parcel count (the labels
+ * are printed from it), when it was sent, the carrier
  * name and — when we know our tracking account — the tracking link, so the
  * customer's order page shows it without anyone typing it in.
  */
 export async function markOrderSentToAras(input: {
   orderId: string;
   integrationCode: string;
+  pieceCount: number;
   trackingUrl: string | null;
 }): Promise<Result<void, ExternalApiError>> {
   const supabase = await createSupabaseServerClient();
-  const update: Record<string, string> = {
+  const update: Record<string, string | number> = {
     aras_integration_code: input.integrationCode,
+    aras_piece_count: input.pieceCount,
     aras_sent_at: new Date().toISOString(),
     cargo_carrier: ARAS_CARRIER_NAME,
   };
@@ -135,7 +142,7 @@ export async function clearArasShipment(orderId: string): Promise<Result<void, E
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any)
     .from("orders")
-    .update({ aras_integration_code: null, aras_sent_at: null })
+    .update({ aras_integration_code: null, aras_piece_count: null, aras_sent_at: null })
     .eq("id", orderId);
   if (error) {
     logger.error({ orderId, code: error.code }, "aras_clear_failed");

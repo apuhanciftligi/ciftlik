@@ -2,11 +2,15 @@
  * Aras Kargo "SetOrder" payload, built from what we already store on a cargo
  * order. Pure: no XML, no HTTP (that's infrastructure/aras-client.ts).
  *
- * We send only the order and recipient; the branch counts, weighs and
- * measures the parcels at drop-off. So no PieceCount / PieceDetails / Weight
- * here. Aras approved exactly this payload in testing (Nov 2026), even though
- * they describe our account as "Parça Bazlı". If a branch ever can't scan a
- * label, sending one PieceDetail per parcel is the fix to look at first.
+ * Our Aras account is "Parça Bazlı" (piece-based): at the branch, staff scan
+ * each parcel's own barcode, and Aras only recognises a barcode that was sent
+ * beforehand as a PieceDetail.BarcodeNumber. So every parcel gets one
+ * PieceDetail, and the label prints that barcode (see aras-label.ts). Sending
+ * only the integration code (our first version) passed Aras's test, but live
+ * branches could not match the scanned label to anything.
+ *
+ * Weights are a placeholder of 1: the branch weighs and measures each parcel
+ * at drop-off and charges by what it measures.
  *
  * Field limits are Aras's (SetOrder doc §4.1). Text that only describes the
  * address is truncated to fit; anything Aras requires and we don't have
@@ -27,7 +31,19 @@ export interface ArasOrder {
   readonly cityName: string;
   readonly townName: string;
   readonly quarterName: string | null;
+  /** One per parcel, in order; never empty. */
+  readonly pieces: readonly ArasPiece[];
 }
+
+export interface ArasPiece {
+  /** Printed as the parcel label's barcode; scanned at the branch. */
+  readonly barcodeNumber: string;
+  /** "Koli 1/2" — shown to branch staff. */
+  readonly description: string;
+}
+
+/** Parcels per order we accept (the DB check allows the same range). */
+export const ARAS_MAX_PIECES = 20;
 
 export interface ArasOrderSource {
   readonly orderNumber: string;
@@ -37,6 +53,8 @@ export interface ArasOrderSource {
   readonly phone: unknown;
   /** `orders.delivery_address_snapshot` (raw jsonb). */
   readonly snapshot: unknown;
+  /** How many parcels go to the branch (1–ARAS_MAX_PIECES). */
+  readonly pieceCount: number;
 }
 
 const LIMITS = {
@@ -56,6 +74,28 @@ const LIMITS = {
 export function arasIntegrationCode(orderNumber: string): string | null {
   const digits = orderNumber.replace(/\D/g, "");
   return /^[0-9]{2,16}$/.test(digits) ? digits : null;
+}
+
+/**
+ * Barcode of parcel `piece` (1-based) of an order: the integration code plus a
+ * two-digit parcel number ("26081800477" → "2608180047701", "…02"). Digits
+ * only, unique per parcel because the integration code is unique per order,
+ * and derivable again when the label is reprinted.
+ */
+export function arasPieceBarcode(integrationCode: string, piece: number): string {
+  return `${integrationCode}${String(piece).padStart(2, "0")}`;
+}
+
+export function isValidArasPieceCount(count: number): boolean {
+  return Number.isInteger(count) && count >= 1 && count <= ARAS_MAX_PIECES;
+}
+
+/** The parcels of an order sent as `count` pieces. */
+export function arasPieces(integrationCode: string, count: number): ArasPiece[] {
+  return Array.from({ length: count }, (_, i) => ({
+    barcodeNumber: arasPieceBarcode(integrationCode, i + 1),
+    description: `Koli ${i + 1}/${count}`,
+  }));
 }
 
 /** Aras's public tracking page for one of our shipments. */
@@ -110,6 +150,14 @@ export function buildArasOrder(source: ArasOrderSource): Result<ArasOrder, Valid
   if (!city) missing.push("il");
   if (!town) missing.push("ilçe");
   if (!address) missing.push("adres");
+  if (!isValidArasPieceCount(source.pieceCount)) {
+    return err(
+      new ValidationError({
+        message: `Koli sayısı 1 ile ${ARAS_MAX_PIECES} arasında olmalı.`,
+        details: { pieceCount: source.pieceCount },
+      }),
+    );
+  }
   if (!integrationCode || missing.length > 0) {
     return err(
       new ValidationError({
@@ -128,6 +176,7 @@ export function buildArasOrder(source: ArasOrderSource): Result<ArasOrder, Valid
     cityName: fit(city, LIMITS.city),
     townName: fit(town, LIMITS.town),
     quarterName: quarter ? fit(quarter, LIMITS.quarter) : null,
+    pieces: arasPieces(integrationCode, source.pieceCount),
   });
 }
 

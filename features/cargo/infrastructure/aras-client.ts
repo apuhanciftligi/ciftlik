@@ -17,7 +17,7 @@ import { logger } from "@/shared/logger";
 import { err, ok, type Result } from "@/shared/result";
 import { escapeXml, readTag } from "@/shared/xml";
 
-import type { ArasOrder } from "@/features/cargo/domain/aras-order";
+import type { ArasOrder, ArasPiece } from "@/features/cargo/domain/aras-order";
 
 const ENDPOINT = {
   test: "https://customerservicestest.araskargo.com.tr/arascargoservice/arascargoservice.asmx",
@@ -44,6 +44,21 @@ const resultSchema = z.object({
 
 function el(tag: string, value: string | null): string {
   return value === null ? "" : `<${tag}>${escapeXml(value)}</${tag}>`;
+}
+
+/**
+ * One parcel. Elements follow the WSDL's sequence order (ASMX binds by it).
+ * Weights are placeholders; the branch weighs and measures at drop-off.
+ */
+function pieceDetail(piece: ArasPiece): string {
+  return (
+    "<PieceDetail>" +
+    el("VolumetricWeight", "1") +
+    el("Weight", "1") +
+    el("BarcodeNumber", piece.barcodeNumber) +
+    el("Description", piece.description) +
+    "</PieceDetail>"
+  );
 }
 
 function envelope(body: string): string {
@@ -109,7 +124,8 @@ async function call(
 
 /**
  * Send (or re-send — Aras updates the record, up to 20 times per code) one
- * order's recipient data. Returns Aras's result; "0" means accepted.
+ * order's recipient data and parcels. Field order follows the WSDL's Order
+ * sequence. Returns Aras's result; "0" means accepted.
  */
 export function sendArasOrder(
   creds: ArasCredentials,
@@ -126,11 +142,13 @@ export function sendArasOrder(
     el("ReceiverPhone1", order.receiverPhone) +
     el("ReceiverCityName", order.cityName) +
     el("ReceiverTownName", order.townName) +
+    el("PieceCount", String(order.pieces.length)) +
     el("IntegrationCode", order.integrationCode) +
     el("ReceiverQuarterName", order.quarterName) +
     // 1 = sender pays (the customer already paid us the cargo fee); domestic.
     el("PayorTypeCode", "1") +
     el("IsWorldWide", "0") +
+    `<PieceDetails>${order.pieces.map(pieceDetail).join("")}</PieceDetails>` +
     "</Order></orderInfo>" +
     `<userName>${user}</userName><password>${pass}</password>` +
     "</SetOrder>";

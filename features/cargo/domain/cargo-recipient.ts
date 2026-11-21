@@ -24,6 +24,9 @@ export interface CargoRecipient {
   /** Aras Kargo integration code once the order was sent to Aras (staff
    *  type or scan it at the branch instead of reading the address), else null. */
   readonly arasCode: string | null;
+  /** Parcels the order was sent to Aras with (one label each); null if unsent
+   *  or sent before parcels were sent. */
+  readonly arasPieceCount: number | null;
 }
 
 export interface RawCargoRecipient {
@@ -33,6 +36,7 @@ export interface RawCargoRecipient {
   readonly phone: unknown;
   readonly snapshot: unknown;
   readonly arasCode?: unknown;
+  readonly arasPieceCount?: unknown;
 }
 
 export function composeCargoRecipient(raw: RawCargoRecipient): CargoRecipient {
@@ -61,5 +65,10 @@ export function composeCargoRecipient(raw: RawCargoRecipient): CargoRecipient {
       ? raw.arasCode.trim()
       : null;
 
-  return { orderId: raw.orderId, name, phone, address, addressNote, arasCode };
+  const arasPieceCount =
+    arasCode && typeof raw.arasPieceCount === "number" && Number.isInteger(raw.arasPieceCount)
+      ? raw.arasPieceCount
+      : null;
+
+  return { orderId: raw.orderId, name, phone, address, addressNote, arasCode, arasPieceCount };
 }

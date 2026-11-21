@@ -71,7 +71,7 @@ export function CargoCardDialog({ orderNumber, recipient }: CargoCardDialogProps
                 {arasCode}
               </p>
               <p className="text-sm text-muted-foreground">
-                Bilgiler Aras&apos;a gönderildi. Şubede bu kodu söyleyin.
+                Bilgiler Aras&apos;a gönderildi. Her koliye kendi etiketini yapıştırın; şubede etiket barkodu okutulur.
               </p>
               <div className="flex justify-end">
                 <CancelArasButton orderId={recipient.orderId} arasCode={arasCode} />

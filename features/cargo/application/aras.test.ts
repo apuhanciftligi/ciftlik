@@ -32,14 +32,15 @@ vi.mock("@/features/cargo/infrastructure/aras-client", () => ({
 
 const findArasIntegrationCode = vi.fn();
 const clearArasShipment = vi.fn();
+const fetchArasShipmentSource = vi.fn();
 vi.mock("@/features/cargo/infrastructure/aras-shipment.repository", () => ({
   findArasIntegrationCode: (...a: unknown[]) => findArasIntegrationCode(...a),
   clearArasShipment: (...a: unknown[]) => clearArasShipment(...a),
-  fetchArasShipmentSource: vi.fn(),
+  fetchArasShipmentSource: (...a: unknown[]) => fetchArasShipmentSource(...a),
   markOrderSentToAras: vi.fn(),
 }));
 
-const { cancelArasShipmentAs, cancelArasShipmentIfSent } = await import(
+const { cancelArasShipmentAs, cancelArasShipmentIfSent, getArasLabels } = await import(
   "@/features/cargo/application/aras"
 );
 
@@ -134,5 +135,35 @@ describe("cancelArasShipmentIfSent (order cancelled)", () => {
 
     expect(cancelArasDispatch).not.toHaveBeenCalled();
     expect(logAudit).not.toHaveBeenCalled();
+  });
+});
+
+describe("getArasLabels", () => {
+  const source = {
+    orderNumber: "261101-K-01007",
+    status: "confirmed",
+    fulfillmentChannel: "shipping",
+    snapshot: {},
+    arasIntegrationCode: "26110101007",
+    arasPieceCount: 2 as number | null,
+    firstName: "Ayşe",
+    lastName: "Yılmaz",
+    phone: "+905321234567",
+  };
+
+  it("prints one label per parcel sent, each with its own barcode", async () => {
+    fetchArasShipmentSource.mockResolvedValue(ok(source));
+    const result = await getArasLabels(ORDER);
+    expect(result.ok && result.value.map((l) => l.barcode)).toEqual([
+      "2611010100701",
+      "2611010100702",
+    ]);
+  });
+
+  it("refuses orders sent without parcels, whose label the branch can't match", async () => {
+    fetchArasShipmentSource.mockResolvedValue(ok({ ...source, arasPieceCount: null }));
+    const result = await getArasLabels(ORDER);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error.message).toContain("tekrar gönder");
   });
 });
