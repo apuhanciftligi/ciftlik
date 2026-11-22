@@ -88,6 +88,25 @@ export function MobileNavSheet({
           <DrawerLink href="/" onNavigate={close} icon={<HouseIcon aria-hidden />}>
             Ana Sayfa
           </DrawerLink>
+          {/* Sign-in sits right under Ana Sayfa: the shopper who came to log in
+              should not have to scroll past every page link to find it. */}
+          {isAdmin ? (
+            <DrawerLink
+              href="/admin"
+              onNavigate={close}
+              icon={<LayoutDashboardIcon aria-hidden />}
+            >
+              Yönetim Paneli
+            </DrawerLink>
+          ) : (
+            <DrawerLink
+              href={authed ? "/hesap" : "/giris"}
+              onNavigate={close}
+              icon={<UserRoundIcon aria-hidden />}
+            >
+              {authed ? "Hesabım" : "Giriş Yap"}
+            </DrawerLink>
+          )}
           <DrawerLink href="/#urunler" onNavigate={close} icon={<LayoutGridIcon aria-hidden />}>
             Ürünler
           </DrawerLink>
@@ -116,23 +135,6 @@ export function MobileNavSheet({
           <DrawerLink href="/iletisim" onNavigate={close} icon={<MailIcon aria-hidden />}>
             İletişim
           </DrawerLink>
-          {isAdmin ? (
-            <DrawerLink
-              href="/admin"
-              onNavigate={close}
-              icon={<LayoutDashboardIcon aria-hidden />}
-            >
-              Yönetim Paneli
-            </DrawerLink>
-          ) : (
-            <DrawerLink
-              href={authed ? "/hesap" : "/giris"}
-              onNavigate={close}
-              icon={<UserRoundIcon aria-hidden />}
-            >
-              {authed ? "Hesabım" : "Giriş Yap"}
-            </DrawerLink>
-          )}
 
           {authed ? (
             <form action={customerSignOutAction} className="mt-1">
