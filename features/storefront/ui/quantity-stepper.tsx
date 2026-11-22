@@ -55,35 +55,79 @@ export function QuantityStepper({
 }) {
   const { getQuantity, setQuantity, removeItem, addItem } = useCart();
   const qty = getQuantity(product.key);
-  const atMin = qty <= product.min_qty;
 
-  const handleDecrement = () => {
-    if (atMin) {
-      const removedQty = qty;
-      removeItem(product.key);
-      // Meta Pixel (no-op without a Pixel ID): reported after the basket changed.
-      trackProductQuantityDecreased(product, removedQty, 0);
-      toast(`${product.display_name} sepetten çıkarıldı`, {
-        action: {
-          label: "Geri al",
-          onClick: () => {
-            addItem(product.key, removedQty);
-            trackProductAddedToCart(product, removedQty);
-          },
+  const handleRemove = () => {
+    const removedQty = qty;
+    removeItem(product.key);
+    // Meta Pixel (no-op without a Pixel ID): reported after the basket changed.
+    trackProductQuantityDecreased(product, removedQty, 0);
+    toast(`${product.display_name} sepetten çıkarıldı`, {
+      action: {
+        label: "Geri al",
+        onClick: () => {
+          addItem(product.key, removedQty);
+          trackProductAddedToCart(product, removedQty);
         },
-      });
-      return;
-    }
-    const next = decrementQuantity(qty, product.min_qty, product.step);
-    setQuantity(product.key, next);
-    trackProductQuantityDecreased(product, qty, next);
+      },
+    });
   };
 
-  const handleIncrement = () => {
-    const next = incrementQuantity(qty, product.step);
-    setQuantity(product.key, next);
-    trackProductQuantityIncreased(product, qty, next);
-  };
+  return (
+    <StepperControl
+      product={product}
+      quantity={qty}
+      block={block}
+      onChange={(next) => {
+        setQuantity(product.key, next);
+        if (next > qty) trackProductQuantityIncreased(product, qty, next);
+        else trackProductQuantityDecreased(product, qty, next);
+      }}
+      onRemove={handleRemove}
+    />
+  );
+}
+
+/**
+ * The same −/+ control for a quantity that is not in the basket yet: the
+ * shopper picks how many first, then presses "Sepete ekle". Nothing to remove
+ * here, so at the minimum the "−" is simply disabled.
+ */
+export function QuantityPicker({
+  product,
+  quantity,
+  onChange,
+  block = false,
+}: {
+  product: Product;
+  quantity: number;
+  onChange: (next: number) => void;
+  block?: boolean;
+}) {
+  return (
+    <StepperControl
+      product={product}
+      quantity={quantity}
+      block={block}
+      onChange={onChange}
+    />
+  );
+}
+
+function StepperControl({
+  product,
+  quantity,
+  block,
+  onChange,
+  onRemove,
+}: {
+  product: Product;
+  quantity: number;
+  block: boolean;
+  onChange: (next: number) => void;
+  /** Given → at the minimum "−" becomes "Çıkar"; omitted → it is disabled. */
+  onRemove?: () => void;
+}) {
+  const atMin = quantity <= product.min_qty;
 
   return (
     <div
@@ -92,11 +136,11 @@ export function QuantityStepper({
         block ? "flex w-full" : "inline-flex",
       )}
     >
-      {atMin ? (
+      {atMin && onRemove ? (
         <button
           type="button"
           className="shop-press shop-focus flex h-12 shrink-0 items-center gap-1.5 rounded-full bg-secondary px-4 text-base font-bold text-foreground [&_svg]:size-5"
-          onClick={handleDecrement}
+          onClick={onRemove}
         >
           <Trash2Icon aria-hidden />
           Çıkar
@@ -104,8 +148,14 @@ export function QuantityStepper({
       ) : (
         <button
           type="button"
-          className={cn(roundBtn, "bg-secondary text-foreground")}
-          onClick={handleDecrement}
+          className={cn(
+            roundBtn,
+            "bg-secondary text-foreground disabled:pointer-events-none disabled:opacity-40",
+          )}
+          onClick={() =>
+            onChange(decrementQuantity(quantity, product.min_qty, product.step))
+          }
+          disabled={atMin}
           aria-label="Azalt"
         >
           <MinusIcon aria-hidden strokeWidth={3} />
@@ -115,12 +165,12 @@ export function QuantityStepper({
         className="shop-money min-w-16 px-1 text-center text-xl font-bold whitespace-nowrap"
         aria-live="polite"
       >
-        {formatQty(product, qty)}
+        {formatQty(product, quantity)}
       </span>
       <button
         type="button"
         className={cn(roundBtn, "bg-primary text-primary-foreground")}
-        onClick={handleIncrement}
+        onClick={() => onChange(incrementQuantity(quantity, product.step))}
         aria-label="Artır"
       >
         <PlusIcon aria-hidden strokeWidth={3} />

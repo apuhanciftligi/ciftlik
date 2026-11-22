@@ -8,7 +8,11 @@ import { hapticTick } from "@/features/storefront/ui/kit/haptic";
 import { ShopButton } from "@/features/storefront/ui/kit/shop-button";
 import { trackProductAddedToCart } from "@/features/storefront/ui/meta-events";
 import { LineTotal } from "@/features/storefront/ui/line-total";
-import { QuantityStepper } from "@/features/storefront/ui/quantity-stepper";
+import { hasHalfUnitOption } from "@/features/storefront/ui/line-pricing";
+import {
+  QuantityPicker,
+  QuantityStepper,
+} from "@/features/storefront/ui/quantity-stepper";
 
 /** The card and detail page share the exact same basket interaction. */
 export function ProductPurchaseControls({ product }: { product: Product }) {
@@ -27,6 +31,9 @@ export function ProductPurchaseControls({ product }: { product: Product }) {
     setWasInCart(inCart);
     if (!inCart) setReturnedFromCart(true);
   }
+  // How many the shopper wants BEFORE it goes into the basket: pick first,
+  // then "Sepete ekle" adds exactly that. Starts at the product minimum.
+  const [pickedQty, setPickedQty] = useState(product.min_qty);
 
   return (
     <div className="mt-auto pt-5">
@@ -51,16 +58,34 @@ export function ProductPurchaseControls({ product }: { product: Product }) {
       ) : (
         // The entrance sits on a wrapper, not on the button: `.shop-enter`
         // sets its own `transition`, which would replace the button's
-        // 140ms press transition.
-        <div key="add" className={returnedFromCart ? "shop-enter" : undefined}>
+        // 140ms press transition. Quantity is chosen here first, then added.
+        <div
+          key="add"
+          className={
+            returnedFromCart ? "shop-enter flex flex-col gap-3" : "flex flex-col gap-3"
+          }
+        >
+          <p className="flex items-center gap-2 text-lg font-bold text-foreground">
+            {hasHalfUnitOption(product) ? "Miktar seçin" : "Adet seçin"}
+            <span className="ml-auto text-right">
+              <LineTotal product={product} quantity={pickedQty} className="shop-money" />
+            </span>
+          </p>
+          <QuantityPicker
+            product={product}
+            quantity={pickedQty}
+            onChange={setPickedQty}
+            block
+          />
           <ShopButton
             size="lg"
             block
             onClick={() => {
-              addItem(product.key, product.min_qty);
+              addItem(product.key, pickedQty);
               hapticTick();
               // Reported only after the basket really changed; no-op without a Pixel ID.
-              trackProductAddedToCart(product, product.min_qty);
+              trackProductAddedToCart(product, pickedQty);
+              setPickedQty(product.min_qty);
             }}
           >
             <PlusIcon aria-hidden /> Sepete ekle
