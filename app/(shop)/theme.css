@@ -104,6 +104,19 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Phones: the whole storefront one notch smaller (owner's call, 2026-11-22 —
+   at the browser default everything read too big on a narrow screen). The
+   shop is sized in rem, so lowering the root scales text, buttons and spacing
+   together. A percentage, so a phone already set to large text keeps its
+   choice. Below Tailwind's `sm` (40rem; rem in a media query is the browser
+   default, not this value). Floor: form fields are 1.125rem → 16.2px here,
+   still above the 16px at which iOS Safari zooms the page on focus. */
+@media (max-width: 39.99rem) {
+  :root:has(.shop-theme) {
+    font-size: 90%;
+  }
+}
+
 .shop-theme {
   background-color: var(--background);
   color: var(--foreground);
@@ -403,7 +416,9 @@
   }
 
   /* Form field: 52px tall, 18px text (no iOS zoom-on-focus), an edge that is
-     actually visible (4:1 against the ground). */
+     actually visible (4:1 against the ground). On phones the root is 90%
+     (see the top of this file), so this is 16.2px there — do not go below
+     1.125rem, or iOS Safari starts zooming on focus. */
   .shop-field {
     display: block;
     width: 100%;
