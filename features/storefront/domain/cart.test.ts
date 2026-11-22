@@ -8,6 +8,8 @@ import {
   incrementQuantity,
   isMultipleOfStep,
   isValidQuantity,
+  MAX_LINE_QUANTITY,
+  quantityFromInput,
 } from "@/features/storefront/domain/cart";
 
 describe("isMultipleOfStep", () => {
@@ -72,5 +74,41 @@ describe("cart aggregates", () => {
   it("sums line totals without float drift", () => {
     expect(cartSubtotalMinor([12500, 4000, 35000])).toBe(51500);
     expect(cartSubtotalMinor([])).toBe(0);
+  });
+});
+
+describe("quantityFromInput", () => {
+  it("parses whole numbers and both decimal separators", () => {
+    expect(quantityFromInput("3", 1, 1)).toBe(3);
+    expect(quantityFromInput(" 12 ", 1, 1)).toBe(12);
+    expect(quantityFromInput("1,5", 0.5, 0.5)).toBe(1.5);
+    expect(quantityFromInput("1.5", 0.5, 0.5)).toBe(1.5);
+    expect(quantityFromInput(",5", 0.5, 0.5)).toBe(0.5);
+  });
+
+  it("returns null for text that is not a number", () => {
+    expect(quantityFromInput("", 1, 1)).toBeNull();
+    expect(quantityFromInput("abc", 1, 1)).toBeNull();
+    expect(quantityFromInput("-2", 1, 1)).toBeNull();
+    expect(quantityFromInput("1e3", 1, 1)).toBeNull();
+    expect(quantityFromInput("1,5,0", 0.5, 0.5)).toBeNull();
+  });
+
+  it("raises anything below the minimum to the minimum", () => {
+    expect(quantityFromInput("0", 1, 1)).toBe(1);
+    expect(quantityFromInput("0,2", 0.5, 0.5)).toBe(0.5);
+  });
+
+  it("snaps to the product's step", () => {
+    expect(quantityFromInput("1,3", 0.5, 0.5)).toBe(1.5);
+    expect(quantityFromInput("1,2", 0.5, 0.5)).toBe(1);
+    expect(quantityFromInput("2,5", 1, 1)).toBe(3);
+  });
+
+  it("caps at MAX_LINE_QUANTITY, staying on the step", () => {
+    expect(quantityFromInput("10000", 1, 1)).toBe(MAX_LINE_QUANTITY);
+    expect(quantityFromInput("10000", 0.5, 0.5)).toBe(MAX_LINE_QUANTITY);
+    const q = quantityFromInput("5000", 2, 2);
+    expect(q).toBe(998);
   });
 });
