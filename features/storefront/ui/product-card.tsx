@@ -7,6 +7,7 @@ import { ProductPurchaseControls } from "@/features/storefront/ui/product-purcha
 
 import { formatTRY } from "@/shared/utils/money";
 import { env } from "@/shared/env";
+import { cn } from "@/lib/utils";
 
 import { productImagePublicUrl } from "@/features/products/application/product-image";
 import {
@@ -17,10 +18,8 @@ import { PriceTag } from "@/features/storefront/ui/kit/price-tag";
 import {
   fromPriceMinor,
   fromPriceSale,
-  hasHalfUnitOption,
   hasVolumeDiscount,
 } from "@/features/storefront/ui/line-pricing";
-import { LineTotal } from "@/features/storefront/ui/line-total";
 import { productEmoji } from "@/features/storefront/ui/product-emoji";
 
 import type { Product } from "@/features/products/application/list-products";
@@ -59,7 +58,7 @@ export function ProductCard({
     // width, not the grid track — without it a long unbreakable name or the
     // quantity control could push this card wider than its column.
     <article className="shop-card flex h-full min-w-0 flex-col overflow-hidden rounded-3xl border border-border bg-card">
-      <div className="shop-card-media relative aspect-[4/3] overflow-hidden bg-muted">
+      <div className="shop-card-media relative aspect-[16/10] overflow-hidden bg-muted">
         {imageUrl ? (
           <Image
             src={imageUrl}
@@ -114,13 +113,6 @@ export function ProductCard({
           sale={sale && { regularAmount: formatTRY(sale.regularMinor), percent: sale.percent }}
           reservePrefixLine
         />
-        {hasHalfUnitOption(product) ? (
-          <p className="mt-2 text-base text-muted-foreground">
-            Yarım kilo{" "}
-            <LineTotal product={product} quantity={0.5} className="shop-money font-bold text-foreground" />
-          </p>
-        ) : null}
-
         {/* Fulfilment rule, right under the price where the shopper is already
             reading. The Malatya-only one is the one that can surprise someone,
             so it gets the warmer panel. Icon AND words — never colour alone. */}
@@ -137,7 +129,14 @@ export function ProductCard({
         )}
 
         {product.web_description ? (
-          <p className="mt-3 text-base leading-relaxed text-muted-foreground">
+          // Two lines when the full text is one click away on the product page:
+          // the whole card (and its "Sepete ekle") then fits a laptop screen.
+          <p
+            className={cn(
+              "mt-3 text-base leading-relaxed text-muted-foreground",
+              product.web_slug && "line-clamp-2",
+            )}
+          >
             {product.web_description}
           </p>
         ) : null}
