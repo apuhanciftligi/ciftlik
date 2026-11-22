@@ -48,6 +48,30 @@ export function clampQuantity(
   return round2(min + steps * step);
 }
 
+/**
+ * Upper bound for one cart line. Only reachable by typing (the −/+ buttons
+ * stop here too): a slipped extra zero should not become a 10 000-egg order.
+ */
+export const MAX_LINE_QUANTITY = 999;
+
+/**
+ * What the shopper typed into the quantity box → a legal quantity, or null
+ * when the text isn't a number (the box then falls back to the old value).
+ * Accepts the Turkish decimal comma ("1,5") as well as a dot, snaps to the
+ * product's step at/above `min`, and caps at MAX_LINE_QUANTITY.
+ */
+export function quantityFromInput(
+  raw: string,
+  min: number,
+  step: number,
+): number | null {
+  const text = raw.trim().replace(",", ".");
+  if (!/^\d+(\.\d*)?$|^\.\d+$/.test(text)) return null;
+  let quantity = clampQuantity(Math.min(Number(text), MAX_LINE_QUANTITY), min, step);
+  while (quantity > MAX_LINE_QUANTITY) quantity = round2(quantity - step);
+  return quantity;
+}
+
 /** One step up. */
 export function incrementQuantity(quantity: number, step: number): number {
   return round2(quantity + step);

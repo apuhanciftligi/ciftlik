@@ -65,8 +65,10 @@ export function ProductPurchaseControls({ product }: { product: Product }) {
             returnedFromCart ? "shop-enter flex flex-col gap-3" : "flex flex-col gap-3"
           }
         >
-          <p className="flex items-center gap-2 text-lg font-bold text-foreground">
-            {hasHalfUnitOption(product) ? "Miktar seçin" : "Adet seçin"}
+          <p className="flex flex-wrap items-center gap-x-2 text-lg font-bold text-foreground">
+            <span className="whitespace-nowrap">
+              {hasHalfUnitOption(product) ? "Miktar seçin" : "Adet seçin"}
+            </span>
             <span className="ml-auto text-right">
               <LineTotal product={product} quantity={pickedQty} className="shop-money" />
             </span>
