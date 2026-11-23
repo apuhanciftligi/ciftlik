@@ -26,20 +26,17 @@ import { escapeXml, readAllTags, readTag } from "@/shared/xml";
 
 import type { EfaturaRegistration } from "@/features/invoicing/domain/invoice";
 
-/**
- * Live endpoints are issued by QNB only after the test phase is signed off,
- * so live mode is refused until they are added here.
- */
+/** Test endpoints from QNB's test-environment mail; live ones from QNB's go-live mail (2026-11-23). */
 const ENDPOINT = {
   earsiv: {
     test: "https://earsivtest.qnbesolutions.com.tr/earsiv/ws/EarsivWebService",
-    live: null,
+    live: "https://earsiv.qnbesolutions.com.tr/earsiv/ws/EarsivWebService",
   },
   efatura: {
     test: "https://erpefaturatest1.qnbesolutions.com.tr/efatura/ws/connectorService",
-    live: null,
+    live: "https://connector.qnbesolutions.com.tr/connector/ws/connectorService",
   },
-} as const satisfies Record<string, { test: string; live: string | null }>;
+} as const satisfies Record<string, { test: string; live: string }>;
 
 const NAMESPACE = {
   earsiv: "http://service.earsiv.uut.cs.com.tr/",
@@ -58,6 +55,7 @@ export interface QnbCredentials {
   readonly password: string;
   /** Sender VKN/TCKN. */
   readonly vkn: string;
+  /** QNB's integration code (erpKodu): QES00001 in test, QNB-issued in live. */
   readonly erpCode: string;
   readonly testMode: boolean;
 }
@@ -89,10 +87,6 @@ async function call(
   context: Record<string, string>,
 ): Promise<Result<string, ExternalApiError>> {
   const url = creds.testMode ? ENDPOINT[service].test : ENDPOINT[service].live;
-  if (url === null) {
-    logger.error({ service, method, ...context }, "qnb_live_endpoint_missing");
-    return err(new ExternalApiError({ message: "QNB canlı ortam adresi henüz tanımlı değil." }));
-  }
   let xml: string;
   try {
     const res = await fetch(url, {
