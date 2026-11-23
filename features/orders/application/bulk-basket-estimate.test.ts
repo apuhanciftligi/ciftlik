@@ -21,6 +21,7 @@ const EGGS: Product = {
   current_unit_price_minor: 12500, // 125 ₺ / paket
   discount_unit_price_minor: null,
   vat_rate: 1,
+  invoice_name: null,
   price_tiers: [],
   active: true,
   fulfillment_type: "delivery",

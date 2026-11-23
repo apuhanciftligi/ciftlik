@@ -29,6 +29,7 @@ const product: Product = {
   current_unit_price_minor: 12500,
   discount_unit_price_minor: null,
   vat_rate: 1,
+  invoice_name: null,
   price_tiers: [],
   active: true,
   sort_order: 0,

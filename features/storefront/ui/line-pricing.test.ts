@@ -22,6 +22,7 @@ const MILK: Product = {
   current_unit_price_minor: 4000,
   discount_unit_price_minor: 3000,
   vat_rate: 1,
+  invoice_name: null,
   price_tiers: [],
   active: true,
   fulfillment_type: "delivery",
