@@ -84,7 +84,10 @@ function signedPayload(overrides: Partial<Record<string, string>> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  recordCardPayment.mockResolvedValue({ ok: true, value: "recorded" });
+  recordCardPayment.mockResolvedValue({
+    ok: true,
+    value: { kind: "recorded", installmentFeeMinor: 0 },
+  });
   sendOrderConfirmationEmail.mockResolvedValue("sent");
   reportPurchaseToMeta.mockResolvedValue("sent");
 });
@@ -127,9 +130,34 @@ describe("handlePaytrCallback — successful payment", () => {
     expect(recordCardPayment).toHaveBeenCalledWith({
       orderId: ORDER_ID,
       merchantOid: MERCHANT_OID,
-      paidAmountMinor: 24500,
+      totalAmountMinor: 24500,
+      paymentAmountMinor: null,
     });
     expect(sendOrderConfirmationEmail).toHaveBeenCalledTimes(1);
+    expect(sendOrderConfirmationEmail).toHaveBeenCalledWith(ORDER_ID);
+  });
+
+  // Regression: an installment payment carries vade farkı in total_amount, so
+  // it exceeds the order total. Both amounts must reach the booking rule —
+  // the old handler only passed total_amount and the order was left unpaid.
+  it("passes both the collected and the requested amount for an installment payment", async () => {
+    recordCardPayment.mockResolvedValue({
+      ok: true,
+      value: { kind: "recorded", installmentFeeMinor: 2100 },
+    });
+
+    const result = await handlePaytrCallback({
+      ...signedPayload({ total_amount: "26600" }),
+      payment_amount: TOTAL_AMOUNT,
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(recordCardPayment).toHaveBeenCalledWith({
+      orderId: ORDER_ID,
+      merchantOid: MERCHANT_OID,
+      totalAmountMinor: 26600,
+      paymentAmountMinor: 24500,
+    });
     expect(sendOrderConfirmationEmail).toHaveBeenCalledWith(ORDER_ID);
   });
 
@@ -141,7 +169,10 @@ describe("handlePaytrCallback — successful payment", () => {
     expect(reportPurchaseToMeta).toHaveBeenCalledWith(ORDER_ID);
 
     reportPurchaseToMeta.mockClear();
-    recordCardPayment.mockResolvedValue({ ok: true, value: "already_recorded" });
+    recordCardPayment.mockResolvedValue({
+      ok: true,
+      value: { kind: "already_recorded" },
+    });
     await handlePaytrCallback(signedPayload());
     expect(reportPurchaseToMeta).not.toHaveBeenCalled();
   });
@@ -152,7 +183,10 @@ describe("handlePaytrCallback — successful payment", () => {
   });
 
   it("does not re-send the receipt when PayTR retries an already-booked payment", async () => {
-    recordCardPayment.mockResolvedValue({ ok: true, value: "already_recorded" });
+    recordCardPayment.mockResolvedValue({
+      ok: true,
+      value: { kind: "already_recorded" },
+    });
 
     const result = await handlePaytrCallback(signedPayload());
 
@@ -181,7 +215,10 @@ describe("handlePaytrCallback — successful payment", () => {
 
 describe("handlePaytrCallback — amount mismatch", () => {
   it("acknowledges but books nothing, and raises an audit trail", async () => {
-    recordCardPayment.mockResolvedValue({ ok: true, value: "amount_mismatch" });
+    recordCardPayment.mockResolvedValue({
+      ok: true,
+      value: { kind: "amount_mismatch", orderTotalMinor: 24500 },
+    });
 
     const result = await handlePaytrCallback(signedPayload());
 

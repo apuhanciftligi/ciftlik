@@ -149,6 +149,8 @@ export async function handlePaytrCallback(payload: {
   status: string;
   total_amount: string;
   hash: string;
+  /** Requested amount (kuruş, string) — sent on success only. */
+  payment_amount?: string | undefined;
   /** Present only on a failed notification; PayTR omits them on success. */
   failed_reason_code?: string | undefined;
   failed_reason_msg?: string | undefined;
@@ -205,7 +207,9 @@ export async function handlePaytrCallback(payload: {
   const recorded = await recordCardPayment({
     orderId,
     merchantOid: payload.merchant_oid,
-    paidAmountMinor: Number(payload.total_amount),
+    totalAmountMinor: Number(payload.total_amount),
+    paymentAmountMinor:
+      payload.payment_amount === undefined ? null : Number(payload.payment_amount),
   });
   if (!recorded.ok) {
     // Don't acknowledge — PayTR retrying is exactly what we want after a
@@ -214,12 +218,21 @@ export async function handlePaytrCallback(payload: {
     return { ok: false, reason: "db_error" };
   }
 
-  if (recorded.value === "amount_mismatch") {
-    // Money was taken but does not match the order total, so nothing was
-    // booked and the order stays unpaid. Acknowledge (a retry would only
-    // repeat the mismatch) and raise it loudly for manual reconciliation.
+  const outcome = recorded.value;
+  if (outcome.kind === "amount_mismatch") {
+    // Money was taken but falls short of / does not match the order total, so
+    // nothing was booked and the order stays unpaid. Acknowledge (a retry
+    // would only repeat the mismatch) and raise it loudly for manual
+    // reconciliation. An installment surcharge is NOT this case — see
+    // checkCardPaymentAmount.
     logger.error(
-      { orderId, merchantOid: payload.merchant_oid, paid: payload.total_amount },
+      {
+        orderId,
+        merchantOid: payload.merchant_oid,
+        totalAmount: payload.total_amount,
+        paymentAmount: payload.payment_amount,
+        orderTotal: outcome.orderTotalMinor,
+      },
       "paytr_amount_mismatch_unbooked",
     );
     await logAudit({
@@ -230,19 +243,30 @@ export async function handlePaytrCallback(payload: {
       after: {
         merchant_oid: payload.merchant_oid,
         paid_amount_minor: Number(payload.total_amount),
+        requested_amount_minor:
+          payload.payment_amount === undefined ? null : Number(payload.payment_amount),
+        order_total_minor: outcome.orderTotalMinor,
       },
     });
     return { ok: true };
   }
 
-  logger.info({ orderId, outcome: recorded.value }, "paytr_payment_result");
+  logger.info(
+    {
+      orderId,
+      outcome: outcome.kind,
+      installmentFeeMinor:
+        outcome.kind === "recorded" ? outcome.installmentFeeMinor : undefined,
+    },
+    "paytr_payment_result",
+  );
 
   // Only on the FIRST booking: a retried notification must not re-send the
   // receipt. The card path can't send this inline — placeOrder redirects to
   // PayTR long before the payment is known to have succeeded.
-  if (recorded.value === "recorded") {
-    const outcome = await sendOrderConfirmationEmail(orderId);
-    logger.info({ orderId, outcome }, "paytr_confirmation_email");
+  if (outcome.kind === "recorded") {
+    const emailOutcome = await sendOrderConfirmationEmail(orderId);
+    logger.info({ orderId, outcome: emailOutcome }, "paytr_confirmation_email");
 
     // The card sale is real only now. Reported from here because a customer
     // who closes the tab at the bank never reaches the return page's Pixel.

@@ -15,25 +15,29 @@
  */
 import "server-only";
 
+import { checkCardPaymentAmount } from "@/features/payments/domain/paytr";
 import { ExternalApiError, NotFoundError } from "@/shared/errors/app-error";
 import { logger } from "@/shared/logger";
 import { err, ok, type Result } from "@/shared/result";
 import { getSupabaseAdminClient } from "@/shared/supabase/admin";
+import { formatTRY } from "@/shared/utils/money";
 
 /** Postgres unique_violation — the notification was already processed. */
 const UNIQUE_VIOLATION = "23505";
 
 export type CardPaymentOutcome =
-  | "recorded"
-  | "already_recorded"
-  | "amount_mismatch";
+  | { kind: "recorded"; installmentFeeMinor: number }
+  | { kind: "already_recorded" }
+  | { kind: "amount_mismatch"; orderTotalMinor: number | null };
 
 export interface RecordCardPaymentInput {
   orderId: string;
   /** PayTR merchant_oid — the provider-side id, and our idempotency key. */
   merchantOid: string;
-  /** Amount PayTR reports as collected, in kuruş. */
-  paidAmountMinor: number;
+  /** Callback `total_amount`: collected, incl. taksit/vade farkı (kuruş). */
+  totalAmountMinor: number;
+  /** Callback `payment_amount`: what we requested (kuruş); null if absent. */
+  paymentAmountMinor: number | null;
 }
 
 export async function recordCardPayment(
@@ -55,33 +59,48 @@ export async function recordCardPayment(
   }
   if (!order) return err(new NotFoundError({ message: "Sipariş bulunamadı." }));
 
-  // Never record a partial/inflated capture against the order. The amount is
-  // checked BEFORE the insert so a mismatch leaves the ledger untouched.
-  if (Number(order.total_minor ?? 0) !== input.paidAmountMinor) {
+  // Never record a short capture against the order. Checked BEFORE the insert
+  // so a mismatch leaves the ledger untouched. See checkCardPaymentAmount for
+  // why an installment surcharge on top of the total is NOT a mismatch.
+  const orderTotalMinor =
+    order.total_minor === null ? null : Number(order.total_minor);
+  const check = checkCardPaymentAmount({
+    orderTotalMinor: orderTotalMinor ?? Number.NaN,
+    totalAmountMinor: input.totalAmountMinor,
+    paymentAmountMinor: input.paymentAmountMinor,
+  });
+  if (!check.ok) {
     logger.warn(
       {
         orderId: input.orderId,
-        expected: order.total_minor,
-        got: input.paidAmountMinor,
+        expected: orderTotalMinor,
+        totalAmount: input.totalAmountMinor,
+        paymentAmount: input.paymentAmountMinor,
         merchantOid: input.merchantOid,
       },
       "paytr_amount_mismatch",
     );
-    return ok("amount_mismatch");
+    return ok({ kind: "amount_mismatch", orderTotalMinor });
   }
 
   const { error: insertError } = await supabase.from("order_payments").insert({
     order_id: input.orderId,
-    amount_minor: input.paidAmountMinor,
+    amount_minor: check.bookMinor,
     channel: "card",
     provider: "paytr",
     provider_ref: input.merchantOid,
+    // The surcharge stays out of the ledger but on record, so the admin can
+    // reconcile the order against what PayTR's panel shows was charged.
+    note:
+      check.installmentFeeMinor > 0
+        ? `PayTR taksitli ödeme: müşteriden çekilen ${formatTRY(input.totalAmountMinor)} (vade farkı ${formatTRY(check.installmentFeeMinor)}).`
+        : null,
   });
 
   if (insertError) {
     // A retried notification for a payment we already booked. Not an error —
     // PayTR just hasn't seen our "OK" yet.
-    if (insertError.code === UNIQUE_VIOLATION) return ok("already_recorded");
+    if (insertError.code === UNIQUE_VIOLATION) return ok({ kind: "already_recorded" });
     logger.error(
       { orderId: input.orderId, code: insertError.code },
       "card_payment_insert_failed",
@@ -93,5 +112,5 @@ export async function recordCardPayment(
 
   // order_payments_recompute has now derived payment_status / paid_at /
   // amount_paid_minor from the ledger. Nothing else to write.
-  return ok("recorded");
+  return ok({ kind: "recorded", installmentFeeMinor: check.installmentFeeMinor });
 }
