@@ -89,11 +89,11 @@ const serverSchema = z.object({
   ARAS_TRACKING_ACCOUNT_ID: z.string().min(1).optional(),
 
   // QNB eSolutions e-invoicing (e-Arşiv + e-Fatura). Optional: invoicing is
-  // off unless every value below is set. Two separate service users (QNB
-  // issues one per product family). QNB_VKN is the SENDER's tax id
-  // (QNB's test VKN in test mode), QNB_ERP_CODE the integration code QNB
-  // assigns (test: QES00001; changes at go-live). QNB_TEST_MODE "1" = QNB
-  // test endpoints.
+  // off until the e-Arşiv user, its password, QNB_VKN and QNB_ERP_CODE are
+  // set. QNB_VKN is the SENDER's tax id (QNB's test VKN in test mode).
+  // QNB_ERP_CODE is the integration code QNB assigns (test: QES00001; live:
+  // from QNB's go-live mail). The e-Fatura user is only needed once corporate
+  // invoices are sent. QNB_TEST_MODE "1" = QNB test endpoints.
   QNB_EARSIV_USERNAME: z.string().min(1).optional(),
   QNB_EARSIV_PASSWORD: z.string().min(1).optional(),
   QNB_EFATURA_USERNAME: z.string().min(1).optional(),

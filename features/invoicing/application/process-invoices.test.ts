@@ -7,16 +7,15 @@ import type { InvoiceOrder } from "@/features/invoicing/domain/order-invoice";
 import type { InvoiceRow } from "@/features/invoicing/infrastructure/invoice.repository";
 
 vi.mock("next/server", () => ({ after: vi.fn() }));
-vi.mock("@/shared/env", () => ({
-  env: {
-    QNB_EARSIV_USERNAME: "u",
-    QNB_EARSIV_PASSWORD: "p",
-    QNB_VKN: "0106106900",
-    QNB_ERP_CODE: "QES00001",
-    QNB_TEST_MODE: "1",
-    LOG_LEVEL: "silent",
-  },
+const mockEnv = vi.hoisted((): Record<string, string | undefined> => ({
+  QNB_EARSIV_USERNAME: "u",
+  QNB_EARSIV_PASSWORD: "p",
+  QNB_VKN: "0106106900",
+  QNB_ERP_CODE: "QES00001",
+  QNB_TEST_MODE: "1",
+  LOG_LEVEL: "silent",
 }));
+vi.mock("@/shared/env", () => ({ env: mockEnv }));
 const repo = vi.hoisted(() => ({
   claimDueInvoices: vi.fn(),
   loadInvoiceOrder: vi.fn(),
@@ -66,6 +65,32 @@ beforeEach(() => {
 });
 
 describe("processDueInvoices", () => {
+  it("uses the live endpoints when test mode is off", async () => {
+    const saved = mockEnv.QNB_TEST_MODE;
+    mockEnv.QNB_TEST_MODE = "0";
+    try {
+      repo.claimDueInvoices.mockResolvedValue(ok([row(1)]));
+      qnb.createEarsivInvoice.mockResolvedValue(ok(issued));
+      await processDueInvoices();
+      expect(qnb.createEarsivInvoice.mock.calls[0]?.[0]).toMatchObject({ erpCode: "QES00001", testMode: false });
+    } finally {
+      mockEnv.QNB_TEST_MODE = saved;
+    }
+  });
+
+  it("stays off until the e-Arşiv user and the ERP code are set", async () => {
+    for (const key of ["QNB_EARSIV_USERNAME", "QNB_ERP_CODE"]) {
+      const saved = mockEnv[key];
+      mockEnv[key] = undefined;
+      try {
+        expect(await processDueInvoices()).toBeNull();
+        expect(repo.claimDueInvoices).not.toHaveBeenCalled();
+      } finally {
+        mockEnv[key] = saved;
+      }
+    }
+  });
+
   it("issues an e-Arşiv invoice and records its number", async () => {
     repo.claimDueInvoices.mockResolvedValue(ok([row(1)]));
     qnb.createEarsivInvoice.mockResolvedValue(ok(issued));
