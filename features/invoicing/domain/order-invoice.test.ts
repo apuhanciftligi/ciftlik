@@ -21,12 +21,11 @@ const order: InvoiceOrder = {
   orderNumber: "APH-1042",
   status: "confirmed",
   paymentStatus: "paid",
-  paymentMethod: "credit_card",
-  source: "customer_web",
+  paidViaPaytr: true,
   paidAt: new Date("2026-11-20T09:59:00Z"),
   totalMinor: 34000,
   deliveryFeeMinor: 9000,
-  fulfillmentChannel: "delivery",
+  fulfillmentChannel: "shipping",
   customer: { firstName: "Ayşe", lastName: "Yılmaz", email: "ayse@example.com" },
   address,
   items: [
@@ -36,34 +35,32 @@ const order: InvoiceOrder = {
 };
 
 describe("buildOrderInvoice", () => {
-  it("bills paid goods plus the delivery fee, carried by the farm", () => {
+  it("bills a PayTR-paid cargo order: goods plus cargo fee, carried by the cargo company", () => {
     const result = buildOrderInvoice(order, ctx);
     if (!result.ok) throw new Error(result.problems.join(" "));
     const { document } = result;
     expect(document.lines.map((l) => [l.name, l.grossMinor, l.unitCode, l.vatRate])).toEqual([
       ["Yumurta", 25000, "PA", 1],
-      ["Teslimat ücreti", 9000, "C62", 1],
+      ["Kargo ücreti", 9000, "C62", 1],
     ]);
-    expect(document.carrier.taxId).toBe(seller.taxId);
+    expect(document.carrier).toEqual(aras);
     expect(document.payment.method).toBe("card");
     expect(document.buyer).toMatchObject({ kind: "consumer", firstName: "Ayşe", familyName: "Yılmaz" });
   });
 
-  it("names the cargo company as carrier and calls the fee a cargo fee", () => {
-    const result = buildOrderInvoice({ ...order, fulfillmentChannel: "shipping" }, ctx);
+  it("bills a PayTR-paid route order too, carried by the farm", () => {
+    const result = buildOrderInvoice({ ...order, fulfillmentChannel: "delivery" }, ctx);
     if (!result.ok) throw new Error(result.problems.join(" "));
-    expect(result.document.carrier).toEqual(aras);
-    expect(result.document.lines.at(-1)?.name).toBe("Kargo ücreti");
+    expect(result.document.carrier.taxId).toBe(seller.taxId);
+    expect(result.document.lines.at(-1)?.name).toBe("Teslimat ücreti");
   });
 
-  it("leaves havale, cash and admin-entered orders to manual invoicing", () => {
-    for (const patch of [
-      { paymentMethod: "bank_transfer" },
-      { paymentMethod: "cash_on_delivery" },
-      { source: "admin_manual" },
-    ]) {
-      expect(buildOrderInvoice({ ...order, ...patch }, ctx).ok).toBe(false);
-    }
+  it("leaves every order not paid through PayTR to manual invoicing", () => {
+    const result = buildOrderInvoice({ ...order, paidViaPaytr: false }, ctx);
+    expect(result).toEqual({
+      ok: false,
+      problems: ["Ödeme PayTR üzerinden gelmemiş; fatura elle kesilir."],
+    });
   });
 
   it("refuses orders that are not fully paid or cancelled", () => {

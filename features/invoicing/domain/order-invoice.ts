@@ -3,10 +3,11 @@
  *
  * Pure: the worker loads an `InvoiceOrder` (order + items + customer + each
  * product's KDV rate) and this turns it into the document, or says why it
- * cannot be invoiced automatically. Only web orders paid by card are
- * invoiced automatically (owner decision 2026-11-20: havale and cash orders
- * are invoiced by hand). Every buyer is a consumer (no corporate invoices
- * yet), so every order routes to e-Arşiv through `chooseInvoiceChannel`.
+ * cannot be invoiced automatically. For now only orders paid online through
+ * PayTR are invoiced automatically, whatever their channel (owner decision
+ * 2026-11-23); havale, cash and orders marked paid by hand are invoiced by
+ * hand. Every buyer is a consumer (no corporate invoices yet), so every
+ * order routes to e-Arşiv through `chooseInvoiceChannel`.
  */
 import type { VatRate } from "@/shared/vat";
 
@@ -35,9 +36,8 @@ export interface InvoiceOrder {
   readonly orderNumber: string;
   readonly status: string;
   readonly paymentStatus: string;
-  readonly paymentMethod: string;
-  /** orders.source — only 'customer_web' is an internet sale. */
-  readonly source: string;
+  /** True when a PayTR ledger row exists (order_payments.provider = 'paytr'). */
+  readonly paidViaPaytr: boolean;
   readonly paidAt: Date | null;
   readonly totalMinor: number;
   readonly deliveryFeeMinor: number;
@@ -85,11 +85,11 @@ export function buildOrderInvoice(
   const problems: string[] = [];
   if (order.status === "cancelled") problems.push("Sipariş iptal edilmiş.");
   if (order.paymentStatus !== "paid") problems.push("Sipariş tamamen ödenmiş görünmüyor.");
-  // The queue trigger only admits card web orders; checked again here so a
-  // row queued under an older rule is never billed automatically.
-  const method: InvoicePaymentMethod | null = order.paymentMethod === "credit_card" ? "card" : null;
-  if (method === null) problems.push("Bu ödeme yöntemi için otomatik fatura yok; elle kesilir.");
-  if (order.source !== "customer_web") problems.push("Site dışı sipariş; fatura elle kesilir.");
+  // The queue trigger admits the same orders (migration fatura_sadece_paytr);
+  // checked again here so a row queued under an older rule is never billed
+  // automatically. A PayTR payment is a card payment.
+  const method: InvoicePaymentMethod | null = order.paidViaPaytr ? "card" : null;
+  if (method === null) problems.push("Ödeme PayTR üzerinden gelmemiş; fatura elle kesilir.");
   if (order.paidAt && ctx.issuedAt.getTime() - order.paidAt.getTime() > STALE_PAYMENT_MS) {
     // A backlog (e.g. invoicing switched on late) must not be billed in bulk
     // with today's date; someone decides how to invoice those.
