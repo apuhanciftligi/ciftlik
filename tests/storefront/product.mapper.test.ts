@@ -71,6 +71,12 @@ describe("product row mapping", () => {
     expect(mapProductRows([withoutVat], new Map()).ok).toBe(false);
     expect(mapProductRows([{ ...row, vat_rate: 18 }], new Map()).ok).toBe(false);
   });
+  it("maps the invoice name, defaulting to null when the row predates it", () => {
+    const legacy = mapProductRows([row], new Map());
+    expect(legacy.ok && legacy.value[0]?.invoice_name).toBe(null);
+    const named = mapProductRows([{ ...row, invoice_name: "Yumurta" }], new Map());
+    expect(named.ok && named.value[0]?.invoice_name).toBe("Yumurta");
+  });
   it("preserves a nullable URL for legacy inserts", () => {
     const result = mapProductRows([{ ...row, web_slug: null }], new Map());
     expect(result.ok && result.value[0]?.web_slug).toBe(null);

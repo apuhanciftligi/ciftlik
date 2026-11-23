@@ -36,6 +36,8 @@ const productRowSchema = z.object({
   web_description: z.string().nullable(),
   // Optional: the admin RPC row predates the column (merged in separately).
   web_long_description: z.string().nullable().optional(),
+  // Optional: the admin RPC row predates the column (merged in separately).
+  invoice_name: z.string().nullable().optional(),
   image_path: z.string().nullable(),
   image_alt: z.string().nullable(),
   sort_order: z.coerce.number(),
@@ -77,6 +79,7 @@ export function mapProductRows(
       ...row,
       web_slug: toValidWebSlug(row.key, row.web_slug),
       web_long_description: row.web_long_description ?? null,
+      invoice_name: row.invoice_name ?? null,
       discount_unit_price_minor: row.discount_unit_price_minor ?? null,
       is_web_visible: row.is_web_visible ?? true,
       is_featured: row.is_featured ?? false,

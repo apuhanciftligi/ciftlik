@@ -99,6 +99,8 @@ export const productMetadataSchema = z.object({
   step: z.coerce.number().positive("Adım 0'dan büyük olmalı."),
   fulfillment_type: fulfillmentTypeSchema.default("delivery"),
   web_description: nullableText(500, "En fazla 500 karakter olabilir."),
+  // Omitted = keep; "" = clear (invoice falls back to display_name).
+  invoice_name: optionalClearableText(100, "Faturadaki ad en fazla 100 karakter olabilir."),
   web_long_description: optionalClearableText(
     PRODUCT_LONG_DESCRIPTION_MAX,
     `En fazla ${PRODUCT_LONG_DESCRIPTION_MAX} karakter olabilir.`,

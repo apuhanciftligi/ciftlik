@@ -57,6 +57,7 @@ interface FieldsState {
   fulfillment_type: FulfillmentType;
   web_description: string;
   web_long_description: string;
+  invoice_name: string;
   image_alt: string;
   base_price: string; // TRY — create only
 }
@@ -72,6 +73,7 @@ function initialFields(product?: Product): FieldsState {
     fulfillment_type: product?.fulfillment_type ?? "delivery",
     web_description: product?.web_description ?? "",
     web_long_description: product?.web_long_description ?? "",
+    invoice_name: product?.invoice_name ?? "",
     image_alt: product?.image_alt ?? "",
     base_price: "",
   };
@@ -121,6 +123,7 @@ export function ProductFormDialog({
       fulfillment_type: fields.fulfillment_type,
       web_description: fields.web_description,
       web_long_description: fields.web_long_description,
+      invoice_name: fields.invoice_name,
       image_alt: fields.image_alt,
     };
 
@@ -260,6 +263,22 @@ export function ProductFormDialog({
                 placeholder="1"
               />
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="pf-invoice-name">Faturadaki adı — opsiyonel</Label>
+            <Input
+              id="pf-invoice-name"
+              value={fields.invoice_name}
+              onChange={(e) => set({ invoice_name: e.target.value })}
+              placeholder={fields.display_name || "ör. Yumurta"}
+              maxLength={100}
+              aria-describedby="pf-invoice-name-help"
+            />
+            <p id="pf-invoice-name-help" className="text-xs text-muted-foreground">
+              e-Arşiv faturasında ürün bu adla yazılır. Boş bırakırsan ürün adı kullanılır.
+              Satılan ürünü doğru anlatmalı (ör. “Gezen Tavuk Yumurtası” yerine “Yumurta”).
+            </p>
           </div>
 
           <div className="flex flex-col gap-1.5">

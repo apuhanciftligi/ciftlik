@@ -1260,6 +1260,7 @@ export type Database = {
           fulfillment_type: string
           image_alt: string | null
           image_path: string | null
+          invoice_name: string | null
           is_featured: boolean
           is_web_visible: boolean
           key: string
@@ -1284,6 +1285,7 @@ export type Database = {
           fulfillment_type?: string
           image_alt?: string | null
           image_path?: string | null
+          invoice_name?: string | null
           is_featured?: boolean
           is_web_visible?: boolean
           key: string
@@ -1308,6 +1310,7 @@ export type Database = {
           fulfillment_type?: string
           image_alt?: string | null
           image_path?: string | null
+          invoice_name?: string | null
           is_featured?: boolean
           is_web_visible?: boolean
           key?: string

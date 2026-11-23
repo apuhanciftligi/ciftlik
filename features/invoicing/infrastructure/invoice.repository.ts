@@ -89,7 +89,7 @@ const orderBundleSchema = z.object({
       quantity: z.coerce.number(),
       line_total_minor: z.coerce.number().int().nullable(),
       product_snapshot: z.record(z.unknown()),
-      products: z.object({ vat_rate: vatRateSchema }),
+      products: z.object({ vat_rate: vatRateSchema, invoice_name: z.string().nullable() }),
     }),
   ),
 });
@@ -106,7 +106,7 @@ export async function loadInvoiceOrder(orderId: string): Promise<Result<InvoiceO
     .select(
       "order_number, status, payment_status, payment_method, source, paid_at, total_minor, delivery_fee_minor, " +
         "fulfillment_channel, delivery_address_snapshot, customers(first_name, last_name, email), " +
-        "order_items(product_key, quantity, line_total_minor, product_snapshot, products(vat_rate))",
+        "order_items(product_key, quantity, line_total_minor, product_snapshot, products(vat_rate, invoice_name))",
     )
     .eq("id", orderId)
     .single();
@@ -145,7 +145,9 @@ export async function loadInvoiceOrder(orderId: string): Promise<Result<InvoiceO
       postalCode: text(a.postal_code) || null,
     },
     items: o.order_items.map((i) => ({
-      name: text(i.product_snapshot.display_name) || i.product_key,
+      // The product's invoice name when set (current value, like the KDV
+      // rate), else the name the customer saw when ordering.
+      name: text(i.products.invoice_name) || text(i.product_snapshot.display_name) || i.product_key,
       unit: text(i.product_snapshot.unit),
       quantity: i.quantity,
       lineTotalMinor: i.line_total_minor ?? 0,

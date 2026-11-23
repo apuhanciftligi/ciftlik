@@ -25,6 +25,8 @@ export interface Product {
   readonly web_slug: string | null;
   /** Optional long product-page text (plain, paragraphs split by blank lines). */
   readonly web_long_description: string | null;
+  /** Name printed on invoices, or null to use display_name. */
+  readonly invoice_name: string | null;
   readonly unit: ProductUnit;
   readonly unit_label: string;
   readonly package_size: number;

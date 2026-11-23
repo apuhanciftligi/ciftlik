@@ -59,6 +59,7 @@ export async function createProduct(
       fulfillment_type: input.fulfillment_type,
       web_description: input.web_description,
       web_long_description: input.web_long_description ?? null,
+      invoice_name: input.invoice_name ?? null,
       image_alt: input.image_alt,
       current_unit_price_minor: input.base_price_minor,
       created_at: now,
@@ -98,6 +99,7 @@ export async function updateProductMetadata(
     .update({
       ...(fields.web_slug === undefined ? {} : { web_slug: fields.web_slug }),
       // Omitted (undefined) = keep the stored text; null = clear it.
+      ...(fields.invoice_name === undefined ? {} : { invoice_name: fields.invoice_name }),
       ...(fields.web_long_description === undefined
         ? {}
         : { web_long_description: fields.web_long_description }),
