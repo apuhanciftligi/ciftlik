@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  checkCardPaymentAmount,
   computeCallbackHash,
   computePaytrToken,
   encodeBasket,
@@ -112,5 +113,84 @@ describe("order return token", () => {
     expect(verifyOrderReturnToken(token, "260818-K-00510", key, "other-salt")).toBe(
       false,
     );
+  });
+});
+
+describe("checkCardPaymentAmount", () => {
+  it("books a single-shot payment that matches the order exactly", () => {
+    expect(
+      checkCardPaymentAmount({
+        orderTotalMinor: 75000,
+        totalAmountMinor: 75000,
+        paymentAmountMinor: 75000,
+      }),
+    ).toEqual({ ok: true, bookMinor: 75000, installmentFeeMinor: 0 });
+  });
+
+  // The production bug: total_amount includes vade farkı on installments.
+  it("books the order total for an installment payment and isolates the surcharge", () => {
+    expect(
+      checkCardPaymentAmount({
+        orderTotalMinor: 75000,
+        totalAmountMinor: 81450,
+        paymentAmountMinor: 75000,
+      }),
+    ).toEqual({ ok: true, bookMinor: 75000, installmentFeeMinor: 6450 });
+  });
+
+  it("rejects a collected amount below the order total", () => {
+    expect(
+      checkCardPaymentAmount({
+        orderTotalMinor: 75000,
+        totalAmountMinor: 74999,
+        paymentAmountMinor: 75000,
+      }),
+    ).toEqual({ ok: false });
+  });
+
+  it("rejects a session requested for a different total (order edited since)", () => {
+    expect(
+      checkCardPaymentAmount({
+        orderTotalMinor: 60000,
+        totalAmountMinor: 75000,
+        paymentAmountMinor: 75000,
+      }),
+    ).toEqual({ ok: false });
+  });
+
+  it("falls back to an exact match when payment_amount is absent", () => {
+    expect(
+      checkCardPaymentAmount({
+        orderTotalMinor: 75000,
+        totalAmountMinor: 75000,
+        paymentAmountMinor: null,
+      }).ok,
+    ).toBe(true);
+    expect(
+      checkCardPaymentAmount({
+        orderTotalMinor: 75000,
+        totalAmountMinor: 81450,
+        paymentAmountMinor: null,
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("rejects non-integer / missing amounts", () => {
+    for (const bad of [Number.NaN, 1.5, -1]) {
+      expect(
+        checkCardPaymentAmount({
+          orderTotalMinor: 75000,
+          totalAmountMinor: bad,
+          paymentAmountMinor: 75000,
+        }).ok,
+      ).toBe(false);
+    }
+    expect(
+      checkCardPaymentAmount({
+        orderTotalMinor: Number.NaN,
+        totalAmountMinor: 75000,
+        paymentAmountMinor: 75000,
+      }).ok,
+    ).toBe(false);
   });
 });

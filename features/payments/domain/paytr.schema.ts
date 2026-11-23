@@ -8,8 +8,13 @@ import { z } from "zod";
 export const paytrCallbackSchema = z.object({
   merchant_oid: z.string().min(1),
   status: z.string().min(1), // "success" | "failed"
-  total_amount: z.string().min(1), // kuruş, as string
+  // kuruş, as string. COLLECTED amount — includes taksit/vade farkı, so it
+  // can exceed the order total. The only amount the hash covers.
+  total_amount: z.string().min(1),
   hash: z.string().min(1),
+  // kuruş, as string. The amount we REQUESTED in get-token (= order total).
+  // Sent on success only.
+  payment_amount: z.string().optional(),
   failed_reason_code: z.string().optional(),
   failed_reason_msg: z.string().optional(),
 });

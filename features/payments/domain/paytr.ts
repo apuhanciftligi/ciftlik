@@ -87,6 +87,64 @@ export function verifyCallbackHash(
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+export type CardAmountCheck =
+  | {
+      ok: true;
+      /** What the order ledger is credited with: the order total. */
+      bookMinor: number;
+      /**
+       * Taksit/vade farkı the customer paid on top (total_amount − order
+       * total). Kept out of the ledger: it is PayTR's/the bank's, not the
+       * order's, and booking it would show the order as overpaid.
+       */
+      installmentFeeMinor: number;
+    }
+  | { ok: false };
+
+/**
+ * Decide whether a successful PayTR notification settles the order.
+ *
+ * PayTR sends two amounts (https://dev.paytr.com/iframe-api/iframe-api-2-adim):
+ *  - `payment_amount`: the amount we requested in get-token — the order total.
+ *  - `total_amount`: what was actually collected. It is HIGHER than
+ *    payment_amount when the customer picks installments with vade farkı.
+ *
+ * Comparing `total_amount` to the order total (the old rule) rejected every
+ * installment payment as a mismatch — money taken, order left unpaid.
+ *
+ * `total_amount` is the only amount the callback hash covers, so it is the one
+ * that must not fall short of the order: that alone rules out crediting an
+ * order for less than was collected. `payment_amount` must equal the order
+ * total, which catches an order whose total changed after the session was
+ * created. Absent `payment_amount` (PayTR documents it as always present on
+ * success), fall back to requiring an exact `total_amount` match.
+ */
+export function checkCardPaymentAmount(input: {
+  orderTotalMinor: number;
+  /** Callback `total_amount` (kuruş) — collected, HMAC-verified. */
+  totalAmountMinor: number;
+  /** Callback `payment_amount` (kuruş) — requested; null if not sent. */
+  paymentAmountMinor: number | null;
+}): CardAmountCheck {
+  const { orderTotalMinor, totalAmountMinor } = input;
+  const requested = input.paymentAmountMinor ?? totalAmountMinor;
+  if (
+    !Number.isSafeInteger(orderTotalMinor) ||
+    !Number.isSafeInteger(totalAmountMinor) ||
+    !Number.isSafeInteger(requested) ||
+    orderTotalMinor <= 0 ||
+    requested !== orderTotalMinor ||
+    totalAmountMinor < orderTotalMinor
+  ) {
+    return { ok: false };
+  }
+  return {
+    ok: true,
+    bookMinor: orderTotalMinor,
+    installmentFeeMinor: totalAmountMinor - orderTotalMinor,
+  };
+}
+
 export interface BasketLine {
   /** Human-readable label, e.g. "Yumurta × 2". */
   label: string;
