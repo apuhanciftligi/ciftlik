@@ -33,7 +33,7 @@ export default async function FaturalarPage({
       <div>
         <h1 className="text-xl font-semibold">Faturalar</h1>
         <p className="text-sm text-muted-foreground">
-          Ödemesi PayTR ile online gelen siparişlerin e-Arşiv faturaları QNB üzerinden otomatik kesilir. Havale, elden ödeme ve panelden “ödendi” işaretlenen siparişlerin faturası elle kesilir.
+          Ödemesi PayTR ile online gelen siparişlerin e-Arşiv faturaları QNB üzerinden otomatik kesilir. Havale, elden ödeme ve panelden “ödendi” işaretlenen siparişlerin faturası elle kesilir. İade veya fazladan siparişte kesilmiş faturayı “İptal et” ile iptal edebilirsiniz.
         </p>
       </div>
       <InvoiceTable rows={rows} />

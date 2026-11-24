@@ -40,6 +40,7 @@ export type AuditAction =
   | "product.deleted"
   | "payment.recorded"
   | "invoice.retried"
+  | "invoice.cancelled"
   | "payment.deleted"
   // PayTR webhook outcomes that leave no other durable trace. A successful
   // capture needs none — it becomes an order_payments row.

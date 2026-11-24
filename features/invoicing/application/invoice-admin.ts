@@ -9,8 +9,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { assertAdmin } from "@/features/auth/application/assert-admin";
-import { scheduleInvoiceProcessing } from "@/features/invoicing/application/process-invoices";
-import { listInvoices, requeueInvoice } from "@/features/invoicing/infrastructure/invoice.repository";
+import { cancelIssuedInvoice, scheduleInvoiceProcessing } from "@/features/invoicing/application/process-invoices";
+import { getInvoice, listInvoices, requeueInvoice } from "@/features/invoicing/infrastructure/invoice.repository";
 import { logAudit } from "@/shared/audit/log-audit";
 import { ValidationError, type AppError } from "@/shared/errors/app-error";
 import { err, ok, type Result } from "@/shared/result";
@@ -49,6 +49,36 @@ export async function retryInvoiceAction(raw: unknown): Promise<Result<void, App
     after: {},
   });
   scheduleInvoiceProcessing();
+  revalidatePath("/faturalar");
+  return ok(undefined);
+}
+
+const cancelInvoiceSchema = z.object({
+  invoice_id: z.string().uuid(),
+  reason: z.enum(["refund", "duplicate", "other"]),
+});
+
+/** Cancel an issued e-Arşiv invoice (refund, duplicate order, …). Irreversible. */
+export async function cancelInvoiceAction(raw: unknown): Promise<Result<void, AppError>> {
+  const parsed = cancelInvoiceSchema.safeParse(raw);
+  if (!parsed.success) return err(new ValidationError({ message: "Geçersiz istek." }));
+  const auth = await assertAdmin();
+  if (!auth.ok) return err(auth.error);
+
+  const row = await getInvoice(parsed.data.invoice_id);
+  if (!row.ok) return err(row.error);
+  if (!row.value) return err(new ValidationError({ message: "Fatura bulunamadı." }));
+
+  const res = await cancelIssuedInvoice(row.value);
+  if (!res.ok) return err(res.error);
+  await logAudit({
+    actor_id: auth.value.id,
+    action: "invoice.cancelled",
+    entity_type: "invoice",
+    entity_id: row.value.id,
+    before: { status: row.value.status, invoice_number: row.value.invoice_number },
+    after: { status: "cancelled", reason: parsed.data.reason, order_id: row.value.order_id },
+  });
   revalidatePath("/faturalar");
   return ok(undefined);
 }

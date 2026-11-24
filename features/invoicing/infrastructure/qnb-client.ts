@@ -140,6 +140,8 @@ export interface EarsivInvoiceResult {
   readonly invoiceNumber: string;
   readonly uuid: string;
   readonly viewUrl: string | null;
+  /** Set when the invoice was cancelled (faturaSorgulaExt's iptalTarihi). */
+  readonly cancelledAt: string | null;
 }
 
 const earsivResultSchema = z.object({
@@ -186,6 +188,7 @@ const earsivInvoiceSchema = z.object({
   faturaNo: z.string().min(1),
   uuid: z.string().min(1),
   faturaURL: z.string().url().optional(),
+  iptalTarihi: z.string().min(1).optional(),
 });
 
 function toEarsivInvoice(
@@ -201,6 +204,7 @@ function toEarsivInvoice(
     invoiceNumber: parsed.data.faturaNo,
     uuid: parsed.data.uuid,
     viewUrl: parsed.data.faturaURL ?? null,
+    cancelledAt: parsed.data.iptalTarihi ?? null,
   });
 }
 
