@@ -3,9 +3,14 @@ import "server-only";
 /**
  * The signed-in customer's saved delivery addresses.
  *
- * Read through the ordinary cookie-bound client: `addresses_self_select` RLS
- * scopes the rows to the caller's own customer, so there is no customer_id
- * filter here and no service-role escalation.
+ * Read through the ordinary cookie-bound client (no service-role escalation),
+ * and scoped EXPLICITLY to the caller's own customer. RLS alone is not enough:
+ * `addresses_self_select` restricts a customer to their own rows, but
+ * `addresses_admin_all` has no row filter, so an ADMIN who opened /hesap was
+ * shown every customer's address as "Adreslerim" (each one badged "Varsayılan",
+ * one per customer) — and checkout / the recurring request would accept any of
+ * them. Same fix `getMyAccount` already applies to orders. RLS stays the
+ * enforcement; the filter makes the query mean what the page says.
  *
  * The pin fields come back too — the account editor re-renders the map at the
  * saved coordinate, and the checkout picker needs to know whether an address is
@@ -42,9 +47,9 @@ export interface SavedAddress {
 const ADDRESS_SELECT =
   "id, label, city, district, neighborhood, street, building_no, apartment_no, postal_code, description, raw_text, lat, lng, accuracy, source, is_primary, geo_verified_at" as const;
 
-export async function listMyAddresses(): Promise<
-  Result<SavedAddress[], ExternalApiError>
-> {
+export async function listMyAddresses(
+  authUserId: string,
+): Promise<Result<SavedAddress[], ExternalApiError>> {
   const supabase = await createSupabaseServerClient();
 
   // `label` / `geo_verified_at` are not in the generated Database type yet
@@ -52,7 +57,11 @@ export async function listMyAddresses(): Promise<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("addresses")
-    .select(ADDRESS_SELECT)
+    // Inner join only to filter on the owner — `customers` has no FK back to
+    // addresses, so the embed is unambiguous. Uses addresses(customer_id) and
+    // customers(auth_user_id) indexes; one round trip.
+    .select(`${ADDRESS_SELECT}, customers!inner(auth_user_id)`)
+    .eq("customers.auth_user_id", authUserId)
     .order("is_primary", { ascending: false })
     .order("created_at", { ascending: true });
 

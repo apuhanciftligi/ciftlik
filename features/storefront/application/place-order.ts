@@ -330,8 +330,8 @@ export async function placeOrderAction(
   // e-mail. A guest has no book yet: theirs is typed WITH this submit and is
   // validated further down, once the channel it needs to match is known.
   let accountAddress: SavedAddress | null = null;
-  if (!guestAccount) {
-    const addresses = await listMyAddresses();
+  if (actor.authUserId !== null) {
+    const addresses = await listMyAddresses(actor.authUserId);
     if (!addresses.ok) {
       logger.error({ code: addresses.error.code }, "checkout_address_load_failed");
       return { status: "error", message: "Adresleriniz yüklenemedi, tekrar deneyin." };
