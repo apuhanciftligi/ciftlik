@@ -461,7 +461,14 @@ export function AddressForm({
    * Stable by design — `AddressPinCorrector` is memoized, and an inline arrow
    * here would give it a new prop on every keystroke and defeat that entirely.
    * Everything it touches is a setter or a ref, so it needs no dependencies.
+   *
+   * A guest's pin only moves the pin. `reverseGeocodeAction` requires a session
+   * (every miss is a paid Google call), so asking anyway printed "Oturum
+   * bulunamadı" under a map that otherwise worked. Owner decision 2026-11-24:
+   * guests do not get pin → fields; they type the address, which they must do
+   * in full anyway (`requiresAllFields`).
    */
+  const fillsFromPin = onCollect === undefined; // `onCollect` = guest checkout
   const handlePinChange = useCallback(
     (next: { lat: number; lng: number; source: CoordinateSource }) => {
       setPin({
@@ -472,9 +479,9 @@ export function AddressForm({
       });
       setConfirmed(false);
       setSavedOutsideArea(null);
-      void fillFromPin(next.lat, next.lng);
+      if (fillsFromPin) void fillFromPin(next.lat, next.lng);
     },
-    [fillFromPin],
+    [fillFromPin, fillsFromPin],
   );
 
   /**
