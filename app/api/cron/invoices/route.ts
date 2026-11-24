@@ -1,7 +1,7 @@
 /**
  * Daily invoice sweep (Vercel Cron, vercel.json). The normal path invoices
  * right after a payment; this retries anything that failed or was left
- * behind. Vercel sends "Authorization: Bearer $CRON_SECRET"; without the
+ * behind, and cancels invoices of cancelled orders. Vercel sends "Authorization: Bearer $CRON_SECRET"; without the
  * secret configured every call is refused.
  */
 import { timingSafeEqual } from "node:crypto";
@@ -25,12 +25,14 @@ export async function GET(request: Request) {
   // A few batches per run; each is at most 10 invoices.
   let processed = 0;
   let issued = 0;
+  let cancelled = 0;
   for (let batch = 0; batch < 5; batch++) {
     const result = await processDueInvoices();
     if (!result || result.processed === 0) break;
     processed += result.processed;
     issued += result.issued;
+    cancelled += result.cancelled;
   }
-  logger.info({ processed, issued }, "invoice_cron_done");
-  return Response.json({ processed, issued });
+  logger.info({ processed, issued, cancelled }, "invoice_cron_done");
+  return Response.json({ processed, issued, cancelled });
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildOrderInvoice,
+  nextCancelAttemptAt,
   nextInvoiceAttemptAt,
   type InvoiceOrder,
 } from "@/features/invoicing/domain/order-invoice";
@@ -106,5 +107,17 @@ describe("nextInvoiceAttemptAt", () => {
   it("backs off from 5 minutes, doubling, capped at 6 hours", () => {
     expect([1, 2, 3, 4].map(minutesAfter)).toEqual([5, 10, 20, 40]);
     expect(minutesAfter(20)).toBe(360);
+  });
+});
+
+describe("nextCancelAttemptAt", () => {
+  const now = new Date("2026-11-24T12:00:00Z");
+  const waitMinutes = (minutesSinceRequest: number) =>
+    (nextCancelAttemptAt(now, new Date(now.getTime() - minutesSinceRequest * 60_000)).getTime() - now.getTime()) /
+    60_000;
+
+  it("waits as long as the request has waited, from 5 minutes up to 6 hours", () => {
+    expect([0, 3, 5, 40, 120].map(waitMinutes)).toEqual([5, 5, 5, 40, 120]);
+    expect(waitMinutes(24 * 60)).toBe(360);
   });
 });

@@ -4,7 +4,8 @@ import "server-only";
  * Invoice worker: claim due queue rows, build each order's invoice, send it to
  * QNB and record the outcome. Runs right after a payment is recorded
  * (`scheduleInvoiceProcessing`, via `after()`) and from the daily cron, which
- * sweeps retries. Off (no-op) until every QNB_* setting is present.
+ * sweeps retries. The same run cancels invoices of cancelled orders. Off
+ * (no-op) until every QNB_* setting is present.
  *
  * Idempotency: the invoice row id is the ETTN and QNB's islemId. If a send
  * timed out after QNB created the invoice, the retry fails as a duplicate and
@@ -21,13 +22,16 @@ import { chooseInvoiceChannel, type InvoiceSeller } from "@/features/invoicing/d
 import {
   MAX_INVOICE_ATTEMPTS,
   buildOrderInvoice,
+  nextCancelAttemptAt,
   nextInvoiceAttemptAt,
   type CargoCarrier,
 } from "@/features/invoicing/domain/order-invoice";
 import { buildUblInvoice } from "@/features/invoicing/domain/ubl";
 import {
   claimDueInvoices,
+  claimInvoiceCancellations,
   loadInvoiceOrder,
+  markInvoiceCancelFailed,
   markInvoiceCancelled,
   markInvoiceFailed,
   markInvoiceIssued,
@@ -155,19 +159,43 @@ async function processOne(row: InvoiceRow, config: InvoicingConfig): Promise<Out
   return saved.ok ? "issued" : "error";
 }
 
-/** Process one batch of due invoices. Safe to run concurrently. */
-export async function processDueInvoices(): Promise<{ processed: number; issued: number } | null> {
+/**
+ * Process one batch: issue due invoices, then cancel issued invoices whose
+ * order was cancelled (cancel_requested_at, set by the orders trigger).
+ * Cancellations run second so an invoice issued in this very batch for an
+ * order cancelled meanwhile is cancelled right away. Safe to run concurrently.
+ */
+export async function processDueInvoices(): Promise<{ processed: number; issued: number; cancelled: number } | null> {
   const config = invoicingConfig();
   if (!config) return null;
-  const claimed = await claimDueInvoices(BATCH_SIZE);
-  if (!claimed.ok) return { processed: 0, issued: 0 };
+  let processed = 0;
   let issued = 0;
-  for (const row of claimed.value) {
+  let cancelled = 0;
+
+  const claimed = await claimDueInvoices(BATCH_SIZE);
+  for (const row of claimed.ok ? claimed.value : []) {
     const outcome = await processOne(row, config);
+    processed += 1;
     if (outcome === "issued") issued += 1;
     logger.info({ invoiceId: row.id, orderId: row.order_id, outcome, attempt: row.attempts }, "invoice_processed");
   }
-  return { processed: claimed.value.length, issued };
+
+  const toCancel = await claimInvoiceCancellations(BATCH_SIZE);
+  for (const row of toCancel.ok ? toCancel.value : []) {
+    processed += 1;
+    const res = await cancelIssuedInvoice(row);
+    if (res.ok) {
+      cancelled += 1;
+      logger.info({ invoiceId: row.id, orderId: row.order_id }, "invoice_cancelled_for_cancelled_order");
+      continue;
+    }
+    const now = new Date();
+    const requestedAt = row.cancel_requested_at ? new Date(row.cancel_requested_at) : now;
+    await markInvoiceCancelFailed(row.id, `İptal edilemedi: ${res.error.message}`, nextCancelAttemptAt(now, requestedAt));
+    logger.warn({ invoiceId: row.id, orderId: row.order_id, code: res.error.code }, "invoice_cancel_retry");
+  }
+
+  return { processed, issued, cancelled };
 }
 
 /**
@@ -205,7 +233,8 @@ export async function cancelIssuedInvoice(row: InvoiceRow): Promise<Result<void,
 
 /**
  * Run the worker after the current response is sent. Call it wherever an
- * order may just have become paid; the queue itself decides what is due.
+ * order may just have become paid or been cancelled; the queue itself
+ * decides what is due.
  */
 export function scheduleInvoiceProcessing(): void {
   if (!isInvoicingEnabled()) return;

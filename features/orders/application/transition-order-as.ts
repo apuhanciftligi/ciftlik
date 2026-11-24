@@ -18,6 +18,7 @@
 import "server-only";
 
 import { cancelArasShipmentIfSent } from "@/features/cargo/application/aras";
+import { scheduleInvoiceProcessing } from "@/features/invoicing/application/process-invoices";
 import { transitionOrder } from "@/features/orders/domain/order-state-machine";
 import {
   findOrderById,
@@ -94,8 +95,11 @@ export async function transitionOrderAs(
 
   // A cancelled cargo order may already be registered at Aras Kargo; delete
   // it there too (best effort, see cancelArasShipmentIfSent).
+  // Its invoice is flagged for cancellation by the orders_cancel_invoice
+  // trigger; run the invoice worker now instead of waiting for the cron.
   if (input.to_status === "cancelled") {
     await cancelArasShipmentIfSent(actor, input.order_id);
+    scheduleInvoiceProcessing();
   }
 
   return {

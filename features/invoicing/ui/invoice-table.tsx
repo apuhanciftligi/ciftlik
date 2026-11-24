@@ -3,6 +3,8 @@
 /**
  * Admin invoice list: one row per queued/issued invoice, newest first. Issued
  * rows link to QNB's viewer and can be cancelled (refund, duplicate order);
+ * an issued row whose order was cancelled shows that its automatic
+ * cancellation is pending (and why, if QNB refused);
  * failed or parked rows show the reason and a "Tekrar dene" button that puts
  * them back in the queue.
  */
@@ -165,6 +167,9 @@ export function InvoiceTable({ rows }: { rows: readonly InvoiceListRow[] }) {
                 {row.order_number}
               </Link>
               <Badge variant={STATUS_VARIANT[row.status]}>{STATUS_LABEL[row.status]}</Badge>
+              {row.status === "issued" && row.cancel_requested_at ? (
+                <Badge variant="destructive">Sipariş iptal edildi · fatura iptali bekliyor</Badge>
+              ) : null}
               {row.invoice_number ? (
                 <span className="font-mono text-xs text-muted-foreground">{row.invoice_number}</span>
               ) : null}
@@ -174,7 +179,7 @@ export function InvoiceTable({ rows }: { rows: readonly InvoiceListRow[] }) {
               {row.cancelled_at ? ` · İptal edildi: ${formatDateTime(row.cancelled_at)}` : ""}
               {row.attempts > 0 && row.status !== "issued" ? ` · ${row.attempts}. deneme` : ""}
             </p>
-            {row.last_error && row.status !== "issued" ? (
+            {row.last_error && (row.status !== "issued" || row.cancel_requested_at) ? (
               <p className="break-words text-xs text-destructive">{row.last_error}</p>
             ) : null}
           </div>
