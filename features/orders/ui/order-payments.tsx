@@ -21,7 +21,8 @@ import {
 } from "@/features/orders/application/payments";
 import { derivePaymentStatus } from "@/features/orders/domain/payment";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { WhatsAppIcon } from "@/components/ui/whatsapp-icon";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -35,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { formatDate } from "@/shared/utils/date";
 import { formatTRY, parseTRYInput } from "@/shared/utils/money";
 
+import type { PaymentReminder } from "@/features/orders/application/payment-reminder";
 import type { PaymentMethod } from "@/features/orders/domain/order";
 import type {
   OrderPayment,
@@ -64,6 +66,8 @@ interface OrderPaymentsProps {
   paymentMethod: PaymentMethod;
   scheduledFor: string; // YYYY-MM-DD
   payments: OrderPayment[];
+  /** Pre-built "Ödemeyi hatırlat" WhatsApp link; null hides the button. */
+  paymentReminder: PaymentReminder | null;
   /** Refetch the parent (Sheet loader) after a mutation; full page omits it. */
   onMutated?: () => void;
 }
@@ -75,6 +79,7 @@ export function OrderPayments({
   paymentMethod,
   scheduledFor,
   payments,
+  paymentReminder,
   onMutated,
 }: OrderPaymentsProps) {
   const router = useRouter();
@@ -173,6 +178,28 @@ export function OrderPayments({
           {pending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
           Tamamı ödendi ({formatTRY(balance)})
         </Button>
+      ) : null}
+
+      {balance > 0 && paymentReminder ? (
+        // Opens WhatsApp with the message typed in; the admin reads it and
+        // presses send there — nothing is sent from here.
+        <a
+          href={paymentReminder.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "h-11 w-full gap-2 border-[#25D366]/60 text-foreground hover:bg-[#25D366]/10",
+          )}
+        >
+          <WhatsAppIcon className="size-5 shrink-0 text-[#1DA851]" />
+          Ödemeyi hatırlat
+          {paymentReminder.orderCount > 1 ? (
+            <span className="text-xs font-normal text-muted-foreground">
+              ({paymentReminder.orderCount} sipariş · {formatTRY(paymentReminder.totalMinor)})
+            </span>
+          ) : null}
+        </a>
       ) : null}
 
       {payments.length > 0 ? (

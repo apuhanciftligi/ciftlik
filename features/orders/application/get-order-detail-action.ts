@@ -19,6 +19,10 @@ import { assertAdmin } from "@/features/auth/application/assert-admin";
 import { loadCustomerProductPriceMap } from "@/features/customers/application/customer-prices";
 import { getOrderById, getOrderEvents } from "@/features/orders/application/get-order";
 import { getOrderGifts } from "@/features/orders/application/get-order-gifts";
+import {
+  getPaymentReminder,
+  type PaymentReminder,
+} from "@/features/orders/application/payment-reminder";
 import { listPaymentsForOrder } from "@/features/orders/infrastructure/order-payment.repository";
 import { AppError, ValidationError } from "@/shared/errors/app-error";
 import { err, ok, type Result } from "@/shared/result";
@@ -38,6 +42,8 @@ export interface OrderDetail {
    *  pre-fills its "Özel fiyat" fields from these; without them saving would
    *  re-price the order at catalog prices and delete the customer's specials. */
   readonly customerPrices: Record<string, number>;
+  /** "Ödemeyi hatırlat" WhatsApp link; null when nothing is owed / no phone. */
+  readonly paymentReminder: PaymentReminder | null;
 }
 
 export async function getOrderDetailAction(
@@ -60,8 +66,11 @@ export async function getOrderDetailAction(
   ]);
   if (!orderResult.ok) return err(orderResult.error);
 
-  // Needs the order's customer, hence the second (server-side) step.
-  const priceMap = await loadCustomerProductPriceMap(orderResult.value.customer_id);
+  // Need the order's customer, hence the second (server-side) step.
+  const [priceMap, paymentReminder] = await Promise.all([
+    loadCustomerProductPriceMap(orderResult.value.customer_id),
+    getPaymentReminder(orderResult.value),
+  ]);
 
   // Events / payments / gifts failing isn't fatal — the Sheet renders with an
   // empty timeline / ledger / gift list rather than blocking (same as before).
@@ -71,5 +80,6 @@ export async function getOrderDetailAction(
     payments: paymentsResult.ok ? paymentsResult.value : [],
     gifts: giftsResult.ok ? giftsResult.value : [],
     customerPrices: Object.fromEntries(priceMap),
+    paymentReminder,
   });
 }

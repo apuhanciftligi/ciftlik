@@ -12,6 +12,7 @@ import { assertAdmin } from "@/features/auth/application/assert-admin";
 import { getNotificationFeed } from "@/features/admin-notifications/application/list-notifications";
 import { NotificationBell } from "@/features/admin-notifications/ui/notification-bell";
 import { ReminderDueTicker } from "@/features/reminders/ui/reminder-due-ticker";
+import { env } from "@/shared/env";
 import { ErrorCode } from "@/shared/errors/error-codes";
 import {
   SidebarInset,
@@ -93,6 +94,7 @@ export default async function AdminLayout({
               <NotificationBell
                 initialNotifications={notificationFeed.notifications}
                 initialUnreadCount={notificationFeed.unreadCount}
+                pushPublicKey={env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null}
               />
             </div>
           </header>

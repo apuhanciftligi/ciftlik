@@ -14,6 +14,7 @@ import {
   FULFILLMENT_CHANNEL_LABELS,
   type OrderListItem,
 } from "@/features/orders/domain/order";
+import { CustomerWhatsAppLink } from "@/features/orders/ui/customer-whatsapp-link";
 import { TIME_SLOT_OPTIONS } from "@/features/orders/ui/order-grid-columns";
 import { getOrderRowBackground } from "@/features/orders/ui/order-row-color";
 import { orderStatusEditor } from "@/features/orders/ui/order-status-cell";
@@ -96,8 +97,15 @@ export function OrderCardList({
                 {order.source === "recurring_generated" ? (
                   <Badge variant="outline">Abonelik</Badge>
                 ) : null}
-                <div className="ml-auto px-2 py-1">
-                  <PaymentStatusCell order={order} />
+                {/* Not inside the card's button above: a link can't nest in a button. */}
+                <div className="ml-auto flex items-center gap-1">
+                  <CustomerWhatsAppLink
+                    phone={order.customer_phone}
+                    customerName={name && name.length > 0 ? name : "Müşteri"}
+                  />
+                  <div className="px-2 py-1">
+                    <PaymentStatusCell order={order} />
+                  </div>
                 </div>
               </div>
             </li>

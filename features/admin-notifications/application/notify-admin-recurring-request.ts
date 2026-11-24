@@ -14,6 +14,7 @@ import "server-only";
  * notify-admin-new-order.ts: a notification failure must not affect the
  * request the customer just submitted.
  */
+import { schedulePushDispatch } from "@/features/admin-notifications/application/dispatch-push";
 import { buildRecurringRequestNotificationEmail } from "@/features/admin-notifications/domain/notification-email";
 import { insertNotification } from "@/features/admin-notifications/infrastructure/notifications.repository";
 import { env } from "@/shared/env";
@@ -64,6 +65,8 @@ export async function notifyAdminOfRecurringRequest(templateId: string): Promise
       { code: inserted.error.code, templateId },
       "recurring_request_notification_insert_failed",
     );
+  } else {
+    schedulePushDispatch();
   }
 
   if (!env.ADMIN_NOTIFICATION_EMAIL) return;

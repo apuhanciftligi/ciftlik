@@ -5,7 +5,9 @@ import { logger } from "@/shared/logger";
 import { err, ok, type Result } from "@/shared/result";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 
+import type { OrderStatus, PaymentMethod, PaymentStatus } from "@/features/orders/domain/order";
 import type { OrderPayment, PaymentChannel } from "@/features/orders/domain/payment";
+import type { PaymentReminderCandidate } from "@/features/orders/domain/payment-reminder";
 
 // `order_payments` isn't in the generated Database type yet — these use the
 // un-generated-table cast pattern used elsewhere. The order's amount_paid +
@@ -93,4 +95,53 @@ export async function deletePayment(
     return err(new ExternalApiError({ message: error.message, cause: error }));
   }
   return ok(undefined);
+}
+
+export interface PaymentReminderData {
+  readonly customerPhone: string | null;
+  readonly orders: PaymentReminderCandidate[];
+}
+
+/** Guards one reminder against a pathological customer history; a real
+ *  customer has a handful of open orders. */
+const REMINDER_ORDER_LIMIT = 100;
+
+/**
+ * The customer's orders that may still owe money (payment_status pending /
+ * partial — kept in sync with the ledger by DB triggers), plus the phone the
+ * WhatsApp message goes to. The exact "is it due" rules live in
+ * domain/payment-reminder.ts.
+ */
+export async function loadPaymentReminderData(
+  customerId: string,
+): Promise<Result<PaymentReminderData, ExternalApiError>> {
+  const supabase = await createSupabaseServerClient();
+  const [ordersResult, customerResult] = await Promise.all([
+    supabase
+      .from("orders")
+      .select("id, scheduled_for, status, total_minor, amount_paid_minor, payment_method, payment_status")
+      .eq("customer_id", customerId)
+      .neq("status", "cancelled")
+      .in("payment_status", ["pending", "partial"])
+      .order("scheduled_for", { ascending: true })
+      .limit(REMINDER_ORDER_LIMIT),
+    supabase.from("customers").select("phone").eq("id", customerId).maybeSingle(),
+  ]);
+  const error = ordersResult.error ?? customerResult.error;
+  if (error) {
+    logger.error({ code: error.code }, "load_payment_reminder_failed");
+    return err(new ExternalApiError({ message: error.message, cause: error }));
+  }
+  return ok({
+    customerPhone: customerResult.data?.phone ?? null,
+    orders: (ordersResult.data ?? []).map((row) => ({
+      id: row.id,
+      scheduled_for: row.scheduled_for,
+      status: row.status as OrderStatus,
+      total_minor: Number(row.total_minor),
+      amount_paid_minor: Number(row.amount_paid_minor ?? 0),
+      payment_method: row.payment_method as PaymentMethod,
+      payment_status: row.payment_status as PaymentStatus,
+    })),
+  });
 }

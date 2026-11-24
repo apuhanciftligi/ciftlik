@@ -36,6 +36,11 @@ vi.mock("@/features/orders/infrastructure/order-payment.repository", () => ({
   listPaymentsForOrder: (...a: unknown[]) => listPaymentsForOrder(...a),
 }));
 
+const getPaymentReminder = vi.fn();
+vi.mock("@/features/orders/application/payment-reminder", () => ({
+  getPaymentReminder: (...a: unknown[]) => getPaymentReminder(...a),
+}));
+
 const loadCustomerProductPriceMap = vi.fn();
 vi.mock("@/features/customers/application/customer-prices", () => ({
   loadCustomerProductPriceMap: (...a: unknown[]) => loadCustomerProductPriceMap(...a),
@@ -56,6 +61,7 @@ beforeEach(() => {
   listPaymentsForOrder.mockResolvedValue(ok([{ id: "p1" }]));
   getOrderGifts.mockResolvedValue(ok([{ id: "g1" }]));
   loadCustomerProductPriceMap.mockResolvedValue(new Map([["yumurta-30", 4500]]));
+  getPaymentReminder.mockResolvedValue(null);
 });
 
 describe("getOrderDetailAction", () => {
@@ -68,8 +74,10 @@ describe("getOrderDetailAction", () => {
         payments: [{ id: "p1" }],
         gifts: [{ id: "g1" }],
         customerPrices: { "yumurta-30": 4500 },
+        paymentReminder: null,
       }),
     );
+    expect(getPaymentReminder).toHaveBeenCalledWith(order);
     // The special prices are the order's customer's, looked up after the order.
     expect(loadCustomerProductPriceMap).toHaveBeenCalledWith(CUSTOMER_ID);
   });

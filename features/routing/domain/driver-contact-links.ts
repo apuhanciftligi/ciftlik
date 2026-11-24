@@ -8,6 +8,8 @@
  * `customer_phone` as E.164 (`+90...`), so this just strips the punctuation.
  */
 
+import { buildWhatsAppLink as whatsAppLink } from "@/shared/utils/whatsapp";
+
 /** Pure — no I/O, so it's testable without a phone number ever leaving the app. */
 export function whatsAppDeliveryMessage(delivered: boolean): string {
   return delivered
@@ -16,7 +18,5 @@ export function whatsAppDeliveryMessage(delivered: boolean): string {
 }
 
 export function buildWhatsAppLink(phoneE164: string, delivered: boolean): string {
-  const digits = phoneE164.replace(/\D/g, "");
-  const text = whatsAppDeliveryMessage(delivered);
-  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+  return whatsAppLink(phoneE164, whatsAppDeliveryMessage(delivered));
 }

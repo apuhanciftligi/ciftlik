@@ -53,6 +53,7 @@ import {
   isAwaitingCardPayment,
   type OrderPayment,
 } from "@/features/orders/domain/payment";
+import type { PaymentReminder } from "@/features/orders/application/payment-reminder";
 import type { Product } from "@/features/products/application/list-products";
 import { splitDeliveredEdit } from "@/features/orders/domain/delivered-order-edit";
 import {
@@ -78,6 +79,8 @@ interface OrderDetailPanelProps {
   readonly customerPrices?: Record<string, number>;
   readonly payments: OrderPayment[];
   readonly gifts: OrderGiftItem[];
+  /** "Ödemeyi hatırlat" WhatsApp link (payment-reminder.ts); null hides it. */
+  readonly paymentReminder: PaymentReminder | null;
   /** Sheet loaders pass this to refetch after a child mutation (no full
    *  reload); on the full page it's omitted and router.refresh() is used
    *  (see order-payments.tsx). */
@@ -140,6 +143,7 @@ export function OrderDetailPanel({
   customerPrices = {},
   payments,
   gifts,
+  paymentReminder,
   onMutated,
 }: OrderDetailPanelProps) {
   const [order, setOrder] = useState<Order>(initialOrder);
@@ -258,6 +262,7 @@ export function OrderDetailPanel({
         paymentMethod={initialOrder.payment_method}
         scheduledFor={initialOrder.scheduled_for}
         payments={payments}
+        paymentReminder={paymentReminder}
         {...(onMutated ? { onMutated } : {})}
       />
 

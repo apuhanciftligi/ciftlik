@@ -51,7 +51,14 @@ function createWorker() {
   };
   const self = {
     location: { origin: ORIGIN },
-    clients: { claim: vi.fn(async () => {}) },
+    clients: {
+      claim: vi.fn(async () => {}),
+      matchAll: vi.fn(async (): Promise<unknown[]> => []),
+      openWindow: vi.fn(async () => null),
+    },
+    registration: {
+      showNotification: vi.fn(async (_title: string, _options: Record<string, unknown>) => {}),
+    },
     skipWaiting: vi.fn(async () => {}),
     addEventListener(type: string, fn: Handler) {
       handlers[type] = fn;
@@ -199,5 +206,71 @@ describe("ADMIN_PREFIXES", () => {
     const literal = /const ADMIN_PREFIXES = \[([^\]]*)\]/.exec(SOURCE)?.[1] ?? "";
     const inWorker = [...literal.matchAll(/"([^"]+)"/g)].map((m) => m[1]).sort();
     expect(inWorker).toEqual([...ADMIN_ROUTE_PREFIXES].sort());
+  });
+});
+
+describe("push notifications", () => {
+  async function push(data: unknown) {
+    const waits: Promise<unknown>[] = [];
+    worker.handlers.push!({
+      data: { json: () => (typeof data === "string" ? JSON.parse(data) : data) },
+      waitUntil: (p: Promise<unknown>) => waits.push(p),
+    });
+    await Promise.all(waits);
+  }
+
+  async function tap(link: unknown) {
+    const close = vi.fn();
+    const waits: Promise<unknown>[] = [];
+    worker.handlers.notificationclick!({
+      notification: { close, data: { link } },
+      waitUntil: (p: Promise<unknown>) => waits.push(p),
+    });
+    await Promise.all(waits);
+    return close;
+  }
+
+  it("shows the pushed title and body, keeping the link for the tap", async () => {
+    await push({ title: "Yeni sipariş — A1", body: "Ali · Kargo", link: "/orders/1", tag: "n1" });
+    expect(worker.self.registration.showNotification).toHaveBeenCalledWith(
+      "Yeni sipariş — A1",
+      expect.objectContaining({ body: "Ali · Kargo", tag: "n1", data: { link: "/orders/1" } }),
+    );
+  });
+
+  it("shows a generic notification for an unreadable payload", async () => {
+    await push("not json");
+    expect(worker.self.registration.showNotification).toHaveBeenCalledWith(
+      "Apuhan Çiftliği",
+      expect.objectContaining({ data: { link: "/admin" } }),
+    );
+  });
+
+  it("never carries an off-site link", async () => {
+    await push({ title: "t", body: "b", link: "https://evil.example/", tag: "x" });
+    expect(worker.self.registration.showNotification).toHaveBeenCalledWith(
+      "t",
+      expect.objectContaining({ data: { link: "/admin" } }),
+    );
+  });
+
+  it("opens the notification's page when no panel window is open", async () => {
+    const close = await tap("/orders/1");
+    expect(close).toHaveBeenCalled();
+    expect(worker.self.clients.openWindow).toHaveBeenCalledWith(`${ORIGIN}/orders/1`);
+  });
+
+  it("reuses an open panel window", async () => {
+    const client = { url: `${ORIGIN}/admin`, focus: vi.fn(async () => {}), navigate: vi.fn(async () => {}) };
+    worker.self.clients.matchAll.mockResolvedValue([client]);
+    await tap("/animsaticilar?liste=1");
+    expect(client.focus).toHaveBeenCalled();
+    expect(client.navigate).toHaveBeenCalledWith(`${ORIGIN}/animsaticilar?liste=1`);
+    expect(worker.self.clients.openWindow).not.toHaveBeenCalled();
+  });
+
+  it("opens /admin for an off-site link", async () => {
+    await tap("//evil.example/x");
+    expect(worker.self.clients.openWindow).toHaveBeenCalledWith(`${ORIGIN}/admin`);
   });
 });

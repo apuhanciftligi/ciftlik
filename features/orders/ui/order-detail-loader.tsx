@@ -73,6 +73,7 @@ export function OrderDetailLoader({
       payments={state.detail.payments}
       gifts={state.detail.gifts}
       customerPrices={state.detail.customerPrices}
+      paymentReminder={state.detail.paymentReminder}
       onMutated={() => setReloadKey((k) => k + 1)}
     />
   );

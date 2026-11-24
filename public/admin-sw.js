@@ -7,6 +7,11 @@
  * such a page load with a small built-in "İnternet yok" page whose button (and
  * the phone regaining a connection) retries the page the admin was opening.
  *
+ * It also shows the panel's push notifications (new order, recurring request,
+ * due reminder — features/admin-notifications/application/dispatch-push.ts)
+ * and opens the notification's page when it is tapped. In the Android app
+ * Chrome hands these to the app, so they appear under its name and icon.
+ *
  * What it does NOT do, on purpose:
  *   - It never stores a real page. Admin pages carry customer names, phones and
  *     addresses; only the static /offline.html is cached.
@@ -122,4 +127,54 @@ self.addEventListener("fetch", (event) => {
   }
   if (!isAdminNavigation(request, url)) return;
   event.respondWith(handleNavigation(request));
+});
+
+// ---- Push notifications ------------------------------------------------------
+
+const NOTIFICATION_ICON = "/brand/apuhan-icon-192.png";
+
+/** Only same-site paths are ever opened (the server already enforces this). */
+function safePath(link) {
+  return typeof link === "string" && link.startsWith("/") && !link.startsWith("//") ? link : "/admin";
+}
+
+function parsePush(event) {
+  try {
+    const data = event.data ? event.data.json() : null;
+    if (data && typeof data.title === "string") return data;
+  } catch {
+    /* not JSON — fall through to a generic notification */
+  }
+  return { title: "Apuhan Çiftliği", body: "Yeni bildirim", link: "/admin", tag: "apuhan" };
+}
+
+self.addEventListener("push", (event) => {
+  const data = parsePush(event);
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: typeof data.body === "string" ? data.body : "",
+      tag: typeof data.tag === "string" ? data.tag : undefined,
+      icon: NOTIFICATION_ICON,
+      data: { link: safePath(data.link) },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(safePath(event.notification.data && event.notification.data.link), self.location.origin);
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      // Reuse an open panel window: bring it forward on the notification's page.
+      for (const client of windows) {
+        if (new URL(client.url).origin === self.location.origin && "focus" in client) {
+          await client.focus();
+          if ("navigate" in client) await client.navigate(target.href).catch(() => {});
+          return;
+        }
+      }
+      await self.clients.openWindow(target.href);
+    })(),
+  );
 });
