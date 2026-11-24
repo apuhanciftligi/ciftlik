@@ -118,9 +118,11 @@ export function AccountAddresses({ addresses, mapsKey }: AccountAddressesProps) 
 
       {adding ? (
         <AddressForm
-          // New addresses default to the route form: it captures a superset of
-          // what a cargo address needs, so one saved address serves both.
-          mode="route"
+          // The address book has no basket, so the address picks its own mode:
+          // route-grade (pin + area check) in the delivery province, cargo
+          // elsewhere. A province address still captures the route superset,
+          // so one saved address serves both kinds of order.
+          mode="auto"
           mapsKey={mapsKey}
           onSaved={() => {
             setAdding(false);
