@@ -22,7 +22,7 @@ import { buildWhatsAppLink } from "@/shared/utils/whatsapp";
 import type { Order } from "@/features/orders/domain/order";
 
 export interface PaymentReminder {
-  /** wa.me link with the message pre-filled; WhatsApp still waits for "send". */
+  /** WhatsApp link with the message pre-filled; WhatsApp still waits for "send". */
   readonly link: string;
   readonly orderCount: number;
   readonly totalMinor: number;

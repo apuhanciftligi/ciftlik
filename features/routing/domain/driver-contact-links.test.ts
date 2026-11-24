@@ -20,9 +20,9 @@ describe("whatsAppDeliveryMessage", () => {
 });
 
 describe("buildWhatsAppLink", () => {
-  it("strips the E.164 + before building the wa.me link", () => {
+  it("strips the E.164 + before building the WhatsApp link", () => {
     const url = buildWhatsAppLink("+905551234567", false);
-    expect(url.startsWith("https://wa.me/905551234567?text=")).toBe(true);
+    expect(url.startsWith("https://api.whatsapp.com/send?phone=905551234567&text=")).toBe(true);
   });
 
   it("percent-encodes the Turkish message text", () => {
@@ -33,6 +33,6 @@ describe("buildWhatsAppLink", () => {
 
   it("strips any non-digit punctuation, not just the leading +", () => {
     const url = buildWhatsAppLink("+90 555 123 45 67", false);
-    expect(url.startsWith("https://wa.me/905551234567?text=")).toBe(true);
+    expect(url.startsWith("https://api.whatsapp.com/send?phone=905551234567&text=")).toBe(true);
   });
 });

@@ -83,10 +83,19 @@ describe("buildPaymentReminderMessage", () => {
         { scheduledFor: "2026-11-14", totalMinor: 70000, balanceMinor: 70000 },
       ],
     });
-    expect(message.startsWith("Merhabalar,\nApuhan Çiftliği'nden yazıyoruz")).toBe(true);
-    expect(message).toContain("Apuhan Çiftliği'nden yazıyoruz 🐓");
-    expect(message).toContain("• 25 Ekim – 300 TL\n• 14 Kasım – 700 TL\nToplam: 1.000 TL");
-    expect(message).toContain("Ödemeyi zaten yaptıysanız");
+    expect(message).toBe(
+      [
+        "Merhabalar,",
+        "Apuhan Çiftliği'nden yazıyoruz 🐓",
+        "",
+        "Kayıtlarımıza göre ödemesi henüz bize ulaşmamış siparişleriniz:",
+        "• 25 Ekim – 300 TL",
+        "• 14 Kasım – 700 TL",
+        "Toplam: 1.000 TL",
+        "",
+        "İyi günler dileriz 🙏🏻",
+      ].join("\n"),
+    );
   });
 
   it("uses the singular and no total for one order, and explains a remainder", () => {

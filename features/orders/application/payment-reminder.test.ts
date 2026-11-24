@@ -39,13 +39,13 @@ beforeEach(() => {
 });
 
 describe("getPaymentReminder", () => {
-  it("builds a wa.me link to the customer with every unpaid order", async () => {
+  it("builds a WhatsApp link to the customer with every unpaid order", async () => {
     const reminder = await getPaymentReminder(order);
     expect(reminder).not.toBeNull();
     expect(reminder?.orderCount).toBe(2);
     expect(reminder?.totalMinor).toBe(100000);
-    expect(reminder?.link.startsWith("https://wa.me/905321234567?text=")).toBe(true);
-    const text = decodeURIComponent(reminder!.link.split("?text=")[1]!);
+    expect(reminder?.link.startsWith("https://api.whatsapp.com/send?phone=905321234567&text=")).toBe(true);
+    const text = decodeURIComponent(reminder!.link.split("&text=")[1]!);
     expect(text.startsWith("Merhabalar,\n")).toBe(true);
     expect(text).not.toContain("Nurten");
     expect(text).toContain("• 1 Kasım – 300 TL\n• 14 Kasım – 700 TL\nToplam: 1.000 TL");

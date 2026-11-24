@@ -17,7 +17,7 @@ export const BANK_TRANSFER_ACCOUNT_HOLDER = "Hamit Apuhan";
 export const BANK_TRANSFER_BANK_NAME = "QNB Finansbank";
 
 /**
- * wa.me deep link with the order number (and total, once known) pre-filled
+ * WhatsApp deep link with the order number (and total, once known) pre-filled
  * into the message, so the customer only has to attach the receipt and hit
  * send, and the owner sees which order it is without having to ask.
  */

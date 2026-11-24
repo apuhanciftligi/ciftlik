@@ -91,15 +91,13 @@ export function buildPaymentReminderMessage(input: {
   // decision 2026-11-24 — a plain greeting for everyone).
   return [
     "Merhabalar,",
-    "Apuhan Çiftliği'nden yazıyoruz 🐓 Bizi tercih ettiğiniz için çok teşekkür ederiz.",
+    "Apuhan Çiftliği'nden yazıyoruz 🐓",
     "",
     single
       ? "Kayıtlarımıza göre ödemesi henüz bize ulaşmamış siparişiniz:"
       : "Kayıtlarımıza göre ödemesi henüz bize ulaşmamış siparişleriniz:",
     ...items,
     ...(single ? [] : [`Toplam: ${formatReminderAmount(total)}`]),
-    "",
-    "Uygun olduğunuz bir zamanda ödemenizi yapabilirseniz çok seviniriz. Ödemeyi zaten yaptıysanız lütfen bu mesajı dikkate almayın, kayıtlarımızı hemen güncelleriz.",
     "",
     "İyi günler dileriz 🙏🏻",
   ].join("\n");

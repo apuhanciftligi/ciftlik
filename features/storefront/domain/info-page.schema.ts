@@ -78,7 +78,7 @@ export const contactChannelSchema = z.object({
   label: textSchema,
   /** Shown exactly as written in COMPANY / support-contact. */
   value: textSchema,
-  href: z.string().regex(/^(?:tel:\+\d{10,15}|mailto:[^\s@]+@[^\s@]+\.[^\s@]+|https:\/\/wa\.me\/\d{10,15})$/),
+  href: z.string().regex(/^(?:tel:\+\d{10,15}|mailto:[^\s@]+@[^\s@]+\.[^\s@]+|https:\/\/api\.whatsapp\.com\/send\?phone=\d{10,15})$/),
 });
 
 export const contactPageSchema = z.object({
