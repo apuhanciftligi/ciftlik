@@ -114,7 +114,14 @@ export function readCheckoutAccountInput(formData: FormData): unknown {
       phone: formData.get("phone"),
     };
   }
-  return { mode: "existing" };
+  // Signed in. The contact fields are on the form only when the profile lacks
+  // them (see checkoutAccountSchema); `null` when absent.
+  return {
+    mode: "existing",
+    first_name: formData.get("first_name"),
+    last_name: formData.get("last_name"),
+    phone: formData.get("phone"),
+  };
 }
 
 export interface ResolveCheckoutSessionOptions {

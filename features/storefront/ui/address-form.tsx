@@ -30,7 +30,7 @@
  * a sentence, once the customer leaves it, pastes, or presses a button.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2Icon, MapPinIcon } from "lucide-react";
+import { CheckCircle2Icon, MapPinIcon, MapPinOffIcon } from "lucide-react";
 
 import { AddressAutocomplete } from "@/components/address/address-autocomplete";
 import { AddressMapsProvider } from "@/components/address/address-maps-provider";
@@ -43,7 +43,10 @@ import { ShopButton } from "@/features/storefront/ui/kit/shop-button";
 import { ShopInput, ShopTextarea } from "@/features/storefront/ui/kit/shop-field";
 import { revealField } from "@/features/storefront/ui/reveal-field";
 import { DETACHED_HOUSE_APARTMENT_NO } from "@/features/storefront/domain/customer-address.schema";
-import type { MissingField } from "@/features/storefront/domain/checkout-missing";
+import {
+  CHECKOUT_TARGETS,
+  type MissingField,
+} from "@/features/storefront/domain/checkout-missing";
 import { parsePastedAddress } from "@/features/storefront/domain/pasted-address";
 import {
   DELIVERY_PROVINCE,
@@ -120,6 +123,13 @@ export interface AddressFormProps {
   /** Route mode: where "konumumu bulamıyorum" sends the customer (the
    *  checkout's WhatsApp order link). */
   helpHref?: string;
+  /**
+   * Collect mode: the server's "outside the service area" answer for the
+   * address as collected, or null. Shown where the "Konum onaylandı. Kurye bu
+   * noktaya gelecek." box would be — beside it, the refusal read as the site
+   * contradicting itself. A save's own refusal (account path) lands there too.
+   */
+  outsideArea?: string | null;
 }
 
 /** Scroll targets for the checkout's "what is missing" list. */
@@ -159,6 +169,7 @@ export function AddressForm({
   onCollect,
   showMissing = false,
   helpHref,
+  outsideArea = null,
 }: AddressFormProps) {
   const [fields, setFields] = useState<FormFields>(
     initial
@@ -211,6 +222,9 @@ export function AddressForm({
       : false,
   );
   const [error, setError] = useState<string | null>(null);
+  /** A save refused for where the pin is (see `outsideArea`). Cleared by the
+   *  next save and by moving the pin, which is the fix it asks for. */
+  const [savedOutsideArea, setSavedOutsideArea] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // Red marks show per field once the customer has left it (`touched`), and on
   // every field after a paste or a pressed save button.
@@ -457,6 +471,7 @@ export function AddressForm({
         source: next.source,
       });
       setConfirmed(false);
+      setSavedOutsideArea(null);
       void fillFromPin(next.lat, next.lng);
     },
     [fillFromPin],
@@ -522,6 +537,7 @@ export function AddressForm({
 
   async function submit() {
     setError(null);
+    setSavedOutsideArea(null);
     // Never a greyed-out button: a missing field is shown and jumped to.
     const firstMissing = collectMissing[0];
     if (firstMissing) {
@@ -572,10 +588,16 @@ export function AddressForm({
       onSaved(result.addressId);
       return;
     }
-    if (result.status === "validation_error" || result.status === "error") {
+    if (result.status === "validation_error" && result.outsideArea) {
+      setSavedOutsideArea(result.message);
+    } else if (result.status === "validation_error" || result.status === "error") {
       setError(result.message);
     }
   }
+
+  // Shown below the map, outside it (so a map that failed to load cannot
+  // hide it), and it withdraws the "Konum onaylandı" box it contradicts.
+  const locationRefusal = outsideArea ?? savedOutsideArea;
 
   const mapBlock = (
     <AddressMapsProvider
@@ -643,13 +665,15 @@ export function AddressForm({
             confirmation means. Moving the pin un-confirms it (handlePinChange). */}
         {needsPin && hasPin ? (
           confirmed ? (
-            <p className="flex items-start gap-3 rounded-2xl border-2 border-primary bg-(--shop-green-soft) px-4 py-3 text-base leading-relaxed font-semibold text-foreground">
-              <CheckCircle2Icon className="mt-0.5 size-6 shrink-0 text-primary" aria-hidden />
-              <span>
-                Konum onaylandı. Kurye bu noktaya gelecek. Yanlışsa pini haritada
-                sürükleyin.
-              </span>
-            </p>
+            locationRefusal !== null ? null : (
+              <p className="flex items-start gap-3 rounded-2xl border-2 border-primary bg-(--shop-green-soft) px-4 py-3 text-base leading-relaxed font-semibold text-foreground">
+                <CheckCircle2Icon className="mt-0.5 size-6 shrink-0 text-primary" aria-hidden />
+                <span>
+                  Konum onaylandı. Kurye bu noktaya gelecek. Yanlışsa pini haritada
+                  sürükleyin.
+                </span>
+              </p>
+            )
           ) : (
             <div className="flex flex-col gap-2">
               <ShopButton
@@ -882,6 +906,19 @@ export function AddressForm({
           role="alert"
         >
           {error}
+        </p>
+      ) : null}
+      {locationRefusal !== null ? (
+        <p
+          id={CHECKOUT_TARGETS.addressError}
+          className="flex items-start gap-3 rounded-2xl border-2 border-destructive/40 bg-(--shop-red-soft) px-4 py-3 text-base leading-relaxed font-semibold text-destructive"
+          role="alert"
+        >
+          <MapPinOffIcon className="mt-0.5 size-6 shrink-0" aria-hidden />
+          <span>
+            {locationRefusal}
+            {needsPin && hasPin ? " Konum yanlışsa pini haritada sürükleyin." : null}
+          </span>
         </p>
       ) : null}
 

@@ -75,6 +75,11 @@ vi.mock("@/features/storefront/application/resolve-checkout-customer", () => ({
   resolveCheckoutCustomer: (...a: unknown[]) => resolveCheckoutCustomer(...a),
 }));
 
+const ensureCheckoutContact = vi.fn();
+vi.mock("@/features/storefront/application/ensure-checkout-contact", () => ({
+  ensureCheckoutContact: (...a: unknown[]) => ensureCheckoutContact(...a),
+}));
+
 const listMyAddresses = vi.fn();
 vi.mock("@/features/storefront/application/list-addresses", () => ({
   listMyAddresses: () => listMyAddresses(),
@@ -277,6 +282,10 @@ beforeEach(() => {
     },
   });
   resolveCheckoutCustomer.mockResolvedValue({ ok: true, value: "customer-1" });
+  ensureCheckoutContact.mockResolvedValue({
+    ok: true,
+    value: { firstName: "Ayşe", lastName: "Yılmaz", phone: "+905321234567" },
+  });
   listMyAddresses.mockResolvedValue({
     ok: true,
     value: [MALATYA_ADDRESS, ISTANBUL_ADDRESS, MALATYA_ADDRESS_NO_DOOR_DETAIL],
@@ -330,6 +339,73 @@ describe("placeOrderAction — account gate", () => {
     );
     expect(placeWebOrder).toHaveBeenCalledWith(
       expect.objectContaining({ customerId: "customer-1" }),
+    );
+  });
+});
+
+describe("placeOrderAction — account contact", () => {
+  // A profile with no phone used to order straight through: nothing on the
+  // account path asked for one, and the van got a stop it could not call.
+  it("refuses, writing nothing, when the account has no usable phone", async () => {
+    ensureCheckoutContact.mockResolvedValue({
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: "Telefonunuzu yazın." },
+    });
+
+    const state = await placeOrderAction(idle, buildForm());
+
+    expect(state).toEqual({ status: "validation_error", message: "Telefonunuzu yazın." });
+    expect(placeWebOrder).not.toHaveBeenCalled();
+  });
+
+  it("hands the contact fields the checkout asked for to the account check", async () => {
+    await placeOrderAction(
+      idle,
+      buildForm({ first_name: "Ayşe", last_name: "Yılmaz", phone: "0532 123 45 67" }),
+    );
+
+    expect(ensureCheckoutContact).toHaveBeenCalledWith(
+      expect.objectContaining({ authUserId: "auth-1" }),
+      expect.objectContaining({
+        mode: "existing",
+        first_name: "Ayşe",
+        last_name: "Yılmaz",
+        phone: "+905321234567",
+      }),
+    );
+  });
+
+  it("refuses a malformed phone before anything is saved", async () => {
+    const state = await placeOrderAction(idle, buildForm({ phone: "123" }));
+
+    expect(state.status).toBe("validation_error");
+    expect(ensureCheckoutContact).not.toHaveBeenCalled();
+    expect(placeWebOrder).not.toHaveBeenCalled();
+  });
+
+  it("pays with the completed contact, not the stale session copy", async () => {
+    resolveCheckoutSession.mockResolvedValue({
+      ok: true,
+      value: {
+        kind: "session",
+        session: {
+          authUserId: "auth-1",
+          email: "ayse@example.com",
+          firstName: null,
+          lastName: null,
+          phone: null,
+        },
+      },
+    });
+    createPaytrPaymentSession.mockResolvedValue({
+      ok: true,
+      value: { paymentUrl: "https://paytr.example/pay/abc" },
+    });
+
+    await placeOrderAction(idle, buildForm({ payment_method: "credit_card" }));
+
+    expect(createPaytrPaymentSession).toHaveBeenCalledWith(
+      expect.objectContaining({ userPhone: "+905321234567" }),
     );
   });
 });

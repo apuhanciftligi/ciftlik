@@ -67,6 +67,34 @@ export async function linkCustomerAccount(
   return ok(String(data));
 }
 
+export interface CustomerContactRow {
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+}
+
+/**
+ * Name and phone on the login's linked `customers` row — the copy the order is
+ * written against and the driver reads. Null when the login has no row yet.
+ */
+export async function findCustomerContact(
+  authUserId: string,
+): Promise<Result<CustomerContactRow | null, AppError>> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("customers")
+    .select("first_name,last_name,phone")
+    .eq("auth_user_id", authUserId)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    logger.error({ code: error.code, message: error.message }, "customer_contact_load_failed");
+    return err(new ExternalApiError({ message: error.message, cause: error }));
+  }
+  if (!data) return ok(null);
+  return ok({ firstName: data.first_name, lastName: data.last_name, phone: data.phone });
+}
+
 export interface UpdateProfileInput {
   authUserId: string;
   firstName: string;

@@ -22,7 +22,10 @@
 import { revalidatePath } from "next/cache";
 
 import { getCurrentUser } from "@/features/auth/application/get-session";
-import { validateCheckoutAddress } from "@/features/storefront/application/validate-checkout-address";
+import {
+  isOutsideServiceArea,
+  validateCheckoutAddress,
+} from "@/features/storefront/application/validate-checkout-address";
 import { upsertCustomerAddress } from "@/features/storefront/infrastructure/customer-account.repository";
 import { logAudit } from "@/shared/audit/log-audit";
 import { logger } from "@/shared/logger";
@@ -31,7 +34,8 @@ import { composeFullAddress } from "@/shared/utils/address";
 export type SaveAddressState =
   | { status: "idle" }
   | { status: "success"; addressId: string }
-  | { status: "validation_error"; message: string }
+  /** `outsideArea`: refused for where the pin is (see address-form). */
+  | { status: "validation_error"; message: string; outsideArea?: boolean }
   | { status: "error"; message: string };
 
 interface SaveAddressArgs {
@@ -53,7 +57,11 @@ export async function saveAddressAction(
   // no address book and submits its address with the order.
   const validated = await validateCheckoutAddress(args.mode, args.address);
   if (!validated.ok) {
-    return { status: "validation_error", message: validated.error.message };
+    return {
+      status: "validation_error",
+      message: validated.error.message,
+      outsideArea: isOutsideServiceArea(validated.error),
+    };
   }
   const { address, geoVerified } = validated.value;
 

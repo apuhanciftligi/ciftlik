@@ -68,6 +68,7 @@ import {
   readCheckoutAccountInput,
   resolveCheckoutSession,
 } from "@/features/storefront/application/checkout-account";
+import { ensureCheckoutContact } from "@/features/storefront/application/ensure-checkout-contact";
 import { getStorefrontSettings } from "@/features/storefront/application/get-storefront-settings";
 import {
   captureOrderAdSignals,
@@ -293,7 +294,22 @@ export async function placeOrderAction(
       logger.error({ code: customer.error.code }, "checkout_customer_resolve_failed");
       return { status: "error", message: "Hesabınız hazırlanamadı, tekrar deneyin." };
     }
-    actor = session.value.session;
+
+    // No order leaves without a name and a phone the driver can call. A
+    // profile missing them is completed from the checkout's contact fields
+    // (and saved to the account) or the order is refused.
+    const contact = await ensureCheckoutContact(
+      session.value.session,
+      parsed.data.account.mode === "existing" ? parsed.data.account : {},
+    );
+    if (!contact.ok) {
+      if (contact.error.code === "VALIDATION_ERROR") {
+        return { status: "validation_error", message: contact.error.message };
+      }
+      logger.error({ code: contact.error.code }, "checkout_contact_resolve_failed");
+      return { status: "error", message: "Hesabınız hazırlanamadı, tekrar deneyin." };
+    }
+    actor = { ...session.value.session, ...contact.value };
     customerId = customer.value;
   }
 

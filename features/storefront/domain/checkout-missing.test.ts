@@ -5,6 +5,7 @@ import {
   contactProblems,
   fieldErrors,
   listCheckoutMissing,
+  missingContactFields,
   type GuestContactInput,
 } from "@/features/storefront/domain/checkout-missing";
 
@@ -144,5 +145,27 @@ describe("fieldErrors", () => {
       { label: "a", target: "x", message: "first" },
       { label: "b", target: "x", message: "second" },
     ])).toEqual({ x: "first" });
+  });
+});
+
+describe("missingContactFields", () => {
+  it("is empty for a complete contact, e-mail or not", () => {
+    expect(
+      missingContactFields({ firstName: "Veli", lastName: "Demir", phone: "+905321112233" }),
+    ).toEqual([]);
+  });
+
+  it("names every empty or unusable field", () => {
+    expect(
+      missingContactFields({ firstName: "  ", lastName: null, phone: "123" }),
+    ).toEqual(["first_name", "last_name", "phone"]);
+  });
+
+  // An account with no phone is exactly the case the account checkout must
+  // ask about — the driver has nothing to call otherwise.
+  it("treats a missing phone as missing", () => {
+    expect(
+      missingContactFields({ firstName: "Veli", lastName: "Demir", phone: null }),
+    ).toEqual(["phone"]);
   });
 });
