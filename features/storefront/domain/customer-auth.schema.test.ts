@@ -98,4 +98,25 @@ describe("customerProfileSchema", () => {
       }).success,
     ).toBe(false);
   });
+
+  // It used to be optional, so a customer could blank it and then order with
+  // no number for the driver to call.
+  it("requires a phone", () => {
+    for (const phone of ["", "   ", null, undefined]) {
+      const result = customerProfileSchema.safeParse({
+        first_name: "Ali",
+        last_name: "Veli",
+        phone,
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.error.issues[0]?.message).toBe("Telefon gerekli.");
+    }
+  });
+
+  it("rejects an invalid phone", () => {
+    expect(
+      customerProfileSchema.safeParse({ first_name: "Ali", last_name: "Veli", phone: "123" })
+        .success,
+    ).toBe(false);
+  });
 });

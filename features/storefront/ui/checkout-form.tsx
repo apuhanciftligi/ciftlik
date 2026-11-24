@@ -75,6 +75,8 @@ import {
   CHECKOUT_TARGETS,
   fieldErrors,
   listCheckoutMissing,
+  missingContactFields,
+  type GuestContactInput,
   type MissingField,
   type MissingLine,
 } from "@/features/storefront/domain/checkout-missing";
@@ -143,6 +145,15 @@ import type { Product } from "@/features/products/application/list-products";
 
 const initialState: PlaceOrderState = { status: "idle" };
 const initialAccountState: CheckoutAccountState = { status: "idle" };
+
+/** The contact block's inputs, by id (= form field name). */
+type ContactFieldId = "first_name" | "last_name" | "phone" | "account_email";
+const GUEST_CONTACT_FIELDS: readonly ContactFieldId[] = [
+  "first_name",
+  "last_name",
+  "phone",
+  "account_email",
+];
 
 /** Scroll targets that live in this file (the rest: CHECKOUT_TARGETS). */
 const NO_DELIVERY_DAY_ID = "checkout-no-delivery-day";
@@ -609,17 +620,50 @@ export function CheckoutForm({
   // in the order they meet it on the page (see checkout-missing.ts). Listed
   // under the button; pressing the button with any of it open jumps to the
   // first one instead of submitting (see onSubmit below).
-  const guestContact = identity
-    ? null
-    : {
-        firstName: draft.firstName,
-        lastName: draft.lastName,
-        phone: draft.phone,
-        email: draft.email,
-        emailRequired: selectedPaymentMethod === "credit_card",
-      };
+  //
+  // A signed-in customer normally has nothing to fill in here, but a profile
+  // with no name or phone (older logins; "Bilgilerim" used to allow a blank
+  // phone) gets inputs for exactly those, checked by the same rule as a guest's
+  // and saved to the account with the order (ensure-checkout-contact.ts).
+  const accountMissingContact = identity
+    ? missingContactFields({
+        firstName: identity.first_name,
+        lastName: identity.last_name,
+        phone: identity.phone,
+      })
+    : [];
+  /** The contact block's values as the missing-list rule sees them: what was
+   *  typed for a guest, and for an account the typed value only where the
+   *  profile lacked one. Null when an account has nothing to fill in. */
+  function contactInput(typed: {
+    firstName: string;
+    lastName: string;
+    phone: string;
+    email: string;
+  }): GuestContactInput | null {
+    if (!identity) {
+      return { ...typed, emailRequired: selectedPaymentMethod === "credit_card" };
+    }
+    if (accountMissingContact.length === 0) return null;
+    const asks = (field: "first_name" | "last_name" | "phone") =>
+      accountMissingContact.includes(field);
+    return {
+      firstName: asks("first_name") ? typed.firstName : identity.first_name,
+      lastName: asks("last_name") ? typed.lastName : identity.last_name,
+      phone: asks("phone") ? typed.phone : identity.phone,
+      // The account already has one.
+      email: "",
+      emailRequired: false,
+    };
+  }
+  const contact = contactInput({
+    firstName: draft.firstName,
+    lastName: draft.lastName,
+    phone: draft.phone,
+    email: draft.email,
+  });
   const missingLines = listCheckoutMissing({
-    contact: guestContact,
+    contact,
     address: identity
       ? { kind: "account", selected: addressId !== null }
       : {
@@ -632,7 +676,7 @@ export function CheckoutForm({
     distanceSalesAccepted,
   });
   const contactErrors = Object.fromEntries(
-    Object.entries(fieldErrors(guestContact, [])).filter(
+    Object.entries(fieldErrors(contact, [])).filter(
       ([id]) => attempted || contactTouched.has(id),
     ),
   );
@@ -659,17 +703,13 @@ export function CheckoutForm({
       const value = data.get(name);
       return typeof value === "string" ? value : "";
     };
-    const contact = identity
-      ? null
-      : {
-          firstName: read("first_name"),
-          lastName: read("last_name"),
-          phone: read("phone"),
-          email: read("account_email"),
-          emailRequired: selectedPaymentMethod === "credit_card",
-        };
     const lines = listCheckoutMissing({
-      contact,
+      contact: contactInput({
+        firstName: read("first_name"),
+        lastName: read("last_name"),
+        phone: read("phone"),
+        email: read("account_email"),
+      }),
       address: identity
         ? { kind: "account", selected: addressId !== null }
         : {
@@ -753,6 +793,31 @@ export function CheckoutForm({
                 </strong>
                 , siparişiniz bu hesaba kaydedilecek.
               </p>
+              {accountMissingContact.length > 0 ? (
+                <>
+                  <p className="text-base leading-relaxed">
+                    <strong className="font-bold">
+                      Kuryemizin size ulaşabilmesi için eksik bilgilerinizi yazın.
+                    </strong>{" "}
+                    Bilgileriniz hesabınıza kaydedilir, bir dahaki siparişte
+                    tekrar sorulmaz.
+                  </p>
+                  <GuestBlock
+                    fields={accountMissingContact}
+                    disabled={pending}
+                    values={{
+                      firstName: draft.firstName,
+                      lastName: draft.lastName,
+                      phone: draft.phone,
+                      email: draft.email,
+                    }}
+                    onChange={patch}
+                    emailRequired={false}
+                    errors={contactErrors}
+                    onTouch={touchContact}
+                  />
+                </>
+              ) : null}
               <input type="hidden" name="account_mode" value="existing" />
             </>
           ) : (
@@ -773,6 +838,7 @@ export function CheckoutForm({
                 .
               </p>
               <GuestBlock
+                fields={GUEST_CONTACT_FIELDS}
                 disabled={pending}
                 values={{
                   firstName: draft.firstName,
@@ -856,9 +922,17 @@ export function CheckoutForm({
                 onCollect={collectGuestAddress}
                 showMissing={attempted}
                 helpHref={whatsAppOrderHref}
+                outsideArea={
+                  guestCheckResult?.status === "invalid" && guestCheckResult.outsideArea
+                    ? guestCheckResult.message
+                    : null
+                }
               />
               {guestAddress ? <GuestAddressInputs address={guestAddress} /> : null}
-              {guestCheckResult?.status === "invalid" ? (
+              {/* Any other refusal (a field the server will not take). An
+                  out-of-area one is shown by the form itself, in place of its
+                  "Konum onaylandı" box. */}
+              {guestCheckResult?.status === "invalid" && !guestCheckResult.outsideArea ? (
                 <ShopNotice id={CHECKOUT_TARGETS.addressError} tone="danger" role="alert">
                   {guestCheckResult.message}
                 </ShopNotice>
@@ -1508,6 +1582,7 @@ function AccountBlock({
  * without one — so `emailRequired` is wired to the selected method upstream.
  */
 function GuestBlock({
+  fields,
   disabled,
   values,
   onChange,
@@ -1515,6 +1590,9 @@ function GuestBlock({
   errors,
   onTouch,
 }: {
+  /** Which inputs to show: all four for a guest; for a signed-in customer only
+   *  what their profile is missing. */
+  fields: readonly ContactFieldId[];
   disabled: boolean;
   values: {
     firstName: string;
@@ -1540,72 +1618,83 @@ function GuestBlock({
     onBlur: () => onTouch(id),
     ...(errors[id] ? { "aria-invalid": true as const, "aria-describedby": `${id}-error` } : {}),
   });
+  const shows = (id: ContactFieldId) => fields.includes(id);
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <Field required label="Ad" htmlFor="first_name" error={errors.first_name}>
-        <ShopInput
-          id="first_name"
-          name="first_name"
-          autoComplete="given-name"
-          required
-          disabled={disabled}
-          value={values.firstName}
-          onChange={(e) => onChange({ firstName: e.target.value })}
-          {...invalid("first_name")}
-        />
-      </Field>
-      <Field required label="Soyad" htmlFor="last_name" error={errors.last_name}>
-        <ShopInput
-          id="last_name"
-          name="last_name"
-          autoComplete="family-name"
-          required
-          disabled={disabled}
-          value={values.lastName}
-          onChange={(e) => onChange({ lastName: e.target.value })}
-          {...invalid("last_name")}
-        />
-      </Field>
-      <Field required label="Telefon" htmlFor="phone" error={errors.phone}>
-        {/* Grouped as it is typed (0532 123 45 67): a run of eleven digits is
-            hard to check by eye, and the groups are how a number is read
-            aloud. The server normalises whatever arrives. */}
-        <ShopInput
-          id="phone"
-          name="phone"
-          type="tel"
-          inputMode="tel"
-          autoComplete="tel"
-          placeholder="0532 123 45 67"
-          required
-          disabled={disabled}
-          value={values.phone}
-          onChange={(e) => onChange({ phone: formatTRPhoneInput(e.target.value) })}
-          {...invalid("phone")}
-        />
-      </Field>
-      <Field
-        required={emailRequired}
-        label={emailRequired ? "E-posta" : "E-posta (isteğe bağlı)"}
-        htmlFor="account_email"
-        error={errors.account_email}
-      >
-        <ShopInput
-          id="account_email"
-          name="account_email"
-          type="email"
-          autoComplete="email"
-          required={emailRequired}
-          disabled={disabled}
-          value={values.email}
-          onChange={(e) => onChange({ email: e.target.value })}
-          {...invalid("account_email")}
-        />
-      </Field>
-      <p className="text-base text-muted-foreground sm:col-span-2">
-        Sipariş onayını e-posta ile göndeririz. E-posta yalnızca kartla ödemede
-        zorunludur; havale/EFT ve kapıda nakit ödemede gerekmez.
-      </p>
+      {shows("first_name") ? (
+        <Field required label="Ad" htmlFor="first_name" error={errors.first_name}>
+          <ShopInput
+            id="first_name"
+            name="first_name"
+            autoComplete="given-name"
+            required
+            disabled={disabled}
+            value={values.firstName}
+            onChange={(e) => onChange({ firstName: e.target.value })}
+            {...invalid("first_name")}
+          />
+        </Field>
+      ) : null}
+      {shows("last_name") ? (
+        <Field required label="Soyad" htmlFor="last_name" error={errors.last_name}>
+          <ShopInput
+            id="last_name"
+            name="last_name"
+            autoComplete="family-name"
+            required
+            disabled={disabled}
+            value={values.lastName}
+            onChange={(e) => onChange({ lastName: e.target.value })}
+            {...invalid("last_name")}
+          />
+        </Field>
+      ) : null}
+      {shows("phone") ? (
+        <Field required label="Telefon" htmlFor="phone" error={errors.phone}>
+          {/* Grouped as it is typed (0532 123 45 67): a run of eleven digits is
+              hard to check by eye, and the groups are how a number is read
+              aloud. The server normalises whatever arrives. */}
+          <ShopInput
+            id="phone"
+            name="phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="0532 123 45 67"
+            required
+            disabled={disabled}
+            value={values.phone}
+            onChange={(e) => onChange({ phone: formatTRPhoneInput(e.target.value) })}
+            {...invalid("phone")}
+          />
+        </Field>
+      ) : null}
+      {shows("account_email") ? (
+        <>
+          <Field
+            required={emailRequired}
+            label={emailRequired ? "E-posta" : "E-posta (isteğe bağlı)"}
+            htmlFor="account_email"
+            error={errors.account_email}
+          >
+            <ShopInput
+              id="account_email"
+              name="account_email"
+              type="email"
+              autoComplete="email"
+              required={emailRequired}
+              disabled={disabled}
+              value={values.email}
+              onChange={(e) => onChange({ email: e.target.value })}
+              {...invalid("account_email")}
+            />
+          </Field>
+          <p className="text-base text-muted-foreground sm:col-span-2">
+            Sipariş onayını e-posta ile göndeririz. E-posta yalnızca kartla ödemede
+            zorunludur; havale/EFT ve kapıda nakit ödemede gerekmez.
+          </p>
+        </>
+      ) : null}
     </div>
   );
 }

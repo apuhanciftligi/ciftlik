@@ -57,6 +57,27 @@ export interface ValidatedCheckoutAddress {
   geoVerified: boolean;
 }
 
+/**
+ * Marks the refusals that are about WHERE the pin is (outside the area the van
+ * serves), as opposed to a missing or malformed field. The checkout shows those
+ * in place of the "Konum onaylandı" box: next to it, the refusal read as the
+ * site contradicting itself ("Kurye bu noktaya gelecek" / "bölgemizin dışında").
+ */
+const OUTSIDE_SERVICE_AREA = "outside_service_area";
+
+function outsideServiceArea(message: string): ValidationError {
+  return new ValidationError({ message, details: { reason: OUTSIDE_SERVICE_AREA } });
+}
+
+export function isOutsideServiceArea(error: ValidationError): boolean {
+  const details = error.details;
+  return (
+    typeof details === "object" &&
+    details !== null &&
+    (details as { reason?: unknown }).reason === OUTSIDE_SERVICE_AREA
+  );
+}
+
 export async function validateCheckoutAddress(
   mode: "route" | "cargo",
   raw: unknown,
@@ -115,9 +136,9 @@ export async function validateCheckoutAddress(
     logger.warn({ code: area.error.code }, "service_area_check_unavailable");
     if (!isSameProvince(address.city, DELIVERY_PROVINCE)) {
       return err(
-        new ValidationError({
-          message: `Taze ürünlerimiz yalnızca ${DELIVERY_PROVINCE} içinde teslim edilir.`,
-        }),
+        outsideServiceArea(
+          `Taze ürünlerimiz yalnızca ${DELIVERY_PROVINCE} içinde teslim edilir.`,
+        ),
       );
     }
   } else if (area.value === "outside") {
@@ -128,17 +149,17 @@ export async function validateCheckoutAddress(
       "address_rejected_outside_service_area",
     );
     return err(
-      new ValidationError({
-        message: `Bu adres teslimat bölgemizin dışında. Taze ürünler yalnızca ${DELIVERY_PROVINCE} içinde teslim edilir.`,
-      }),
+      outsideServiceArea(
+        `Bu adres teslimat bölgemizin dışında. Taze ürünler yalnızca ${DELIVERY_PROVINCE} içinde teslim edilir.`,
+      ),
     );
   } else if (area.value === "unconfigured") {
     logger.warn({}, "service_area_unconfigured_string_fallback");
     if (!isSameProvince(address.city, DELIVERY_PROVINCE)) {
       return err(
-        new ValidationError({
-          message: `Taze ürünlerimiz yalnızca ${DELIVERY_PROVINCE} içinde teslim edilir.`,
-        }),
+        outsideServiceArea(
+          `Taze ürünlerimiz yalnızca ${DELIVERY_PROVINCE} içinde teslim edilir.`,
+        ),
       );
     }
   } else {

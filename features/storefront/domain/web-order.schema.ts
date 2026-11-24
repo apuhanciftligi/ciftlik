@@ -54,7 +54,18 @@ const phoneTR = z
  * delivery that fails at the door, and it is the field the CRM keys on.
  */
 export const checkoutAccountSchema = z.discriminatedUnion("mode", [
-  z.object({ mode: z.literal("existing") }),
+  /**
+   * Signed in. Identity comes from the account, so these are normally absent.
+   * They are sent only for the parts the profile is missing (no phone, no
+   * name): the checkout asks for exactly those, and place-order saves them to
+   * the account before the order goes. Blank means "not sent".
+   */
+  z.object({
+    mode: z.literal("existing"),
+    first_name: z.preprocess(blankToNull, z.string().trim().max(100).nullable()).optional(),
+    last_name: z.preprocess(blankToNull, z.string().trim().max(100).nullable()).optional(),
+    phone: z.preprocess(blankToNull, phoneTR.nullable()).optional(),
+  }),
   /**
    * No account at all. Identity travels WITH the order because there is no
    * session to read it from and no `customers` row until the writer mints one.

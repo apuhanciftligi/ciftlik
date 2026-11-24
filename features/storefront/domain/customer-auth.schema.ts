@@ -7,20 +7,20 @@ import { z } from "zod";
 import { isE164TR, normalizeTRPhone } from "@/shared/utils/phone";
 
 /**
- * Optional TR phone: empty → null, otherwise normalized to E.164 — the same
- * rule as checkout, so a phone entered at signup/profile dedupes against a
- * guest customer created from a prior order.
+ * Required TR phone, normalized to E.164 — the same rule as checkout, so a
+ * phone entered at signup/profile dedupes against a guest customer created
+ * from a prior order. Required everywhere a customer can set it: a delivery
+ * the driver cannot phone fails at the door, and phone is the field the CRM
+ * and the route readiness check key on. A missing form field reads as blank,
+ * so it gets the same "Telefon gerekli." as an empty one.
  */
-const optionalPhoneTR = z.preprocess(
-  (v) =>
-    v === undefined || v === null || (typeof v === "string" && v.trim() === "")
-      ? null
-      : v,
+const requiredPhoneTR = z.preprocess(
+  (v) => v ?? "",
   z
     .string()
-    .nullable()
+    .trim()
+    .min(1, "Telefon gerekli.")
     .transform((s, ctx) => {
-      if (s === null) return null;
       const normalized = normalizeTRPhone(s);
       if (normalized === null || !isE164TR(normalized)) {
         ctx.addIssue({
@@ -51,30 +51,19 @@ export const customerSignUpSchema = z.object({
   password: z.string().min(8, "Şifre en az 8 karakter olmalı."),
   first_name: z.string().trim().min(1, "Ad gerekli.").max(100),
   last_name: z.string().trim().min(1, "Soyad gerekli.").max(100),
-  // Required, not optional. A delivery the driver cannot phone fails at the
-  // door, and phone is the field the CRM and the route readiness check key on.
   // The same rule applies to the inline signup at checkout.
-  phone: z
-    .string()
-    .min(1, "Telefon gerekli.")
-    .transform((s, ctx) => {
-      const normalized = normalizeTRPhone(s);
-      if (normalized === null || !isE164TR(normalized)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Geçerli bir telefon girin (ör. 0532 123 45 67).",
-        });
-        return z.NEVER;
-      }
-      return normalized;
-    }),
+  phone: requiredPhoneTR,
 });
 
-/** Account "Bilgilerim" editor — name required, phone optional (E.164). */
+/**
+ * Account "Bilgilerim" editor — name and phone required (E.164). The phone used
+ * to be optional here, which let a customer blank it and then order with no
+ * number for the driver to call.
+ */
 export const customerProfileSchema = z.object({
   first_name: z.string().trim().min(1, "Ad gerekli.").max(100),
   last_name: z.string().trim().min(1, "Soyad gerekli.").max(100),
-  phone: optionalPhoneTR,
+  phone: requiredPhoneTR,
 });
 
 export type CustomerProfileInput = z.input<typeof customerProfileSchema>;

@@ -20,14 +20,19 @@
  * Read-only: nothing is written, and no Google call is made (the area check is a
  * PostGIS query). The answer is a UI hint; the submit re-derives it.
  */
-import { validateCheckoutAddress } from "@/features/storefront/application/validate-checkout-address";
+import {
+  isOutsideServiceArea,
+  validateCheckoutAddress,
+} from "@/features/storefront/application/validate-checkout-address";
 import { addressModeSchema } from "@/features/storefront/domain/customer-address.schema";
 import { isRouteUpgradeEligible } from "@/features/storefront/domain/route-capability";
 
 export type GuestAddressCheck =
   /** `routeUpgrade`: a flexible-only basket becomes a delivery order. */
   | { status: "ok"; routeUpgrade: boolean }
-  | { status: "invalid"; message: string };
+  /** `outsideArea`: refused for where the pin is, not for a field — the form
+   *  shows it in place of its "Konum onaylandı" box (see address-form). */
+  | { status: "invalid"; message: string; outsideArea: boolean };
 
 export async function checkGuestAddressAction(
   mode: unknown,
@@ -35,12 +40,16 @@ export async function checkGuestAddressAction(
 ): Promise<GuestAddressCheck> {
   const parsedMode = addressModeSchema.safeParse(mode);
   if (!parsedMode.success) {
-    return { status: "invalid", message: "Adres bilgileri eksik." };
+    return { status: "invalid", message: "Adres bilgileri eksik.", outsideArea: false };
   }
 
   const validated = await validateCheckoutAddress(parsedMode.data, address);
   if (!validated.ok) {
-    return { status: "invalid", message: validated.error.message };
+    return {
+      status: "invalid",
+      message: validated.error.message,
+      outsideArea: isOutsideServiceArea(validated.error),
+    };
   }
 
   return {

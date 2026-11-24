@@ -123,6 +123,37 @@ export function contactProblems(contact: GuestContactInput): MissingField[] {
   return problems;
 }
 
+/** The contact fields an order cannot go without: who to hand it to, and the
+ *  number the driver (or the cargo company) calls. E-mail is not one of them. */
+export interface OrderContact {
+  readonly firstName: string | null;
+  readonly lastName: string | null;
+  readonly phone: string | null;
+}
+
+/**
+ * The fields of `contact` that are empty or unusable, as the checkout's
+ * contact-field ids (`first_name`, `last_name`, `phone`). Empty when the order
+ * can go.
+ *
+ * One rule for every path: the guest block, a signed-in customer whose profile
+ * lacks a name or phone (the account checkout asks for exactly these), and the
+ * server's refusal in place-order. A signed-in customer used to be waved through
+ * with whatever the profile held — "Bilgilerim" lets the phone be blank — so an
+ * order could reach the van with no number to call.
+ */
+export function missingContactFields(
+  contact: OrderContact,
+): ReadonlyArray<"first_name" | "last_name" | "phone"> {
+  return contactProblems({
+    firstName: contact.firstName ?? "",
+    lastName: contact.lastName ?? "",
+    phone: contact.phone ?? "",
+    email: "",
+    emailRequired: false,
+  }).map((p) => p.target as "first_name" | "last_name" | "phone");
+}
+
 /** One line per step that still needs something. Empty when nothing is missing. */
 export function listCheckoutMissing(input: CheckoutMissingInput): MissingLine[] {
   const lines: MissingLine[] = [];

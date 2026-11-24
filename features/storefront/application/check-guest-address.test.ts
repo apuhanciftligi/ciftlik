@@ -4,10 +4,26 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const validateCheckoutAddress = vi.fn();
-vi.mock("@/features/storefront/application/validate-checkout-address", () => ({
-  validateCheckoutAddress: (...a: unknown[]) => validateCheckoutAddress(...a),
+// Loaded by the real module below (for isOutsideServiceArea); never called.
+vi.mock("@/shared/logger", () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
+vi.mock("@/features/storefront/infrastructure/service-area.repository", () => ({
+  checkServiceArea: vi.fn(),
+}));
+
+const validateCheckoutAddress = vi.fn();
+vi.mock("@/features/storefront/application/validate-checkout-address", async () => {
+  // isOutsideServiceArea is a pure read of the error's tag — kept real so the
+  // tag the validator sets and the flag the form reads cannot drift apart.
+  const actual = await vi.importActual<
+    typeof import("@/features/storefront/application/validate-checkout-address")
+  >("@/features/storefront/application/validate-checkout-address");
+  return {
+    isOutsideServiceArea: actual.isOutsideServiceArea,
+    validateCheckoutAddress: (...a: unknown[]) => validateCheckoutAddress(...a),
+  };
+});
 
 const { checkGuestAddressAction } = await import(
   "@/features/storefront/application/check-guest-address"
@@ -84,12 +100,31 @@ describe("checkGuestAddressAction", () => {
   it("passes the validation message through", async () => {
     validateCheckoutAddress.mockResolvedValue({
       ok: false,
-      error: { message: "Bu adres teslimat bölgemizin dışında." },
+      error: { message: "Daire no gerekli." },
+    });
+
+    expect(await checkGuestAddressAction("route", {})).toEqual({
+      status: "invalid",
+      message: "Daire no gerekli.",
+      outsideArea: false,
+    });
+  });
+
+  // The form shows this one in place of "Konum onaylandı. Kurye bu noktaya
+  // gelecek." instead of beside it.
+  it("flags a refusal for where the pin is", async () => {
+    validateCheckoutAddress.mockResolvedValue({
+      ok: false,
+      error: {
+        message: "Bu adres teslimat bölgemizin dışında.",
+        details: { reason: "outside_service_area" },
+      },
     });
 
     expect(await checkGuestAddressAction("route", {})).toEqual({
       status: "invalid",
       message: "Bu adres teslimat bölgemizin dışında.",
+      outsideArea: true,
     });
   });
 
@@ -97,6 +132,7 @@ describe("checkGuestAddressAction", () => {
     expect(await checkGuestAddressAction("van", {})).toEqual({
       status: "invalid",
       message: "Adres bilgileri eksik.",
+      outsideArea: false,
     });
     expect(validateCheckoutAddress).not.toHaveBeenCalled();
   });
