@@ -105,6 +105,13 @@ const serverSchema = z.object({
   // cron endpoints refuse every call.
   CRON_SECRET: z.string().min(16).optional(),
 
+  // Web Push (admin panel notifications on the phone app / desktop). Private
+  // half of the VAPID key pair; the public half is NEXT_PUBLIC_VAPID_PUBLIC_KEY.
+  // Optional: when either is unset no push is sent and the panel hides the
+  // "Bildirimleri aç" switch — the bell still works. Generate a pair with
+  // `npx web-push generate-vapid-keys` (docs/android-apk.md).
+  VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+
   // Observability.
   SENTRY_DSN: z.string().url().optional(),
   LOG_LEVEL: z
@@ -131,6 +138,8 @@ const clientSchema = z.object({
   // light theme. See docs/maps/README.md.
   NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: z.string().min(1).optional(),
   NEXT_PUBLIC_APP_URL: z.string().url(),
+  // Web Push public key — see VAPID_PRIVATE_KEY.
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().min(1).optional(),
 });
 
 // ---- Raw values, listed literally so Next can inline NEXT_PUBLIC_* ----------
@@ -142,6 +151,7 @@ const rawClient = {
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY,
   NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
 };
 
 const rawServer = isServer
@@ -172,6 +182,7 @@ const rawServer = isServer
       QNB_ERP_CODE: process.env.QNB_ERP_CODE,
       QNB_TEST_MODE: process.env.QNB_TEST_MODE,
       CRON_SECRET: process.env.CRON_SECRET,
+      VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
       SENTRY_DSN: process.env.SENTRY_DSN,
       LOG_LEVEL: process.env.LOG_LEVEL,
       DEFAULT_TIMEZONE: process.env.DEFAULT_TIMEZONE,

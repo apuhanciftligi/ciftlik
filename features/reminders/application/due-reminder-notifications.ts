@@ -7,6 +7,7 @@
  * due (features/reminders/ui/reminder-due-ticker.tsx). The database function
  * behind it is idempotent and safe to call from several tabs at once.
  */
+import { schedulePushDispatch } from "@/features/admin-notifications/application/dispatch-push";
 import { assertAdmin } from "@/features/auth/application/assert-admin";
 import {
   materializeDueReminderNotifications,
@@ -21,5 +22,7 @@ export async function checkDueRemindersAction(): Promise<Result<DueNotificationS
 
   const result = await materializeDueReminderNotifications();
   if (!result.ok) return err(result.error);
+  // The database wrote the bell rows; push them to the admins' phones too.
+  if (result.value.created > 0) schedulePushDispatch();
   return ok(result.value);
 }

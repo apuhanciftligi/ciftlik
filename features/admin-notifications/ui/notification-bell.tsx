@@ -20,6 +20,7 @@ import {
   markAllNotificationsReadAction,
   markNotificationReadAction,
 } from "@/features/admin-notifications/application/mark-notification-read";
+import { PushToggle } from "@/features/admin-notifications/ui/push-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,11 +38,14 @@ import type { AdminNotification } from "@/features/admin-notifications/domain/no
 interface NotificationBellProps {
   readonly initialNotifications: readonly AdminNotification[];
   readonly initialUnreadCount: number;
+  /** NEXT_PUBLIC_VAPID_PUBLIC_KEY; null hides the push switch. */
+  readonly pushPublicKey: string | null;
 }
 
 export function NotificationBell({
   initialNotifications,
   initialUnreadCount,
+  pushPublicKey,
 }: NotificationBellProps) {
   const [locallyRead, setLocallyRead] = useState<ReadonlySet<string>>(new Set());
   const { markLocalWrite } = useTableRealtime({
@@ -139,6 +143,7 @@ export function NotificationBell({
             );
           })
         )}
+        <PushToggle publicKey={pushPublicKey} />
       </DropdownMenuContent>
     </DropdownMenu>
   );

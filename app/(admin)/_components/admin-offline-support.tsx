@@ -14,14 +14,13 @@
  */
 import { useEffect } from "react";
 
-const SW_URL = "/admin-sw.js";
-const SW_SCOPE = "/";
+import { ADMIN_SW_SCOPE, ADMIN_SW_URL } from "@/shared/pwa/admin-service-worker";
 
 export function AdminOfflineSupport() {
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return;
     if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register(SW_URL, { scope: SW_SCOPE }).catch(() => {
+    navigator.serviceWorker.register(ADMIN_SW_URL, { scope: ADMIN_SW_SCOPE }).catch(() => {
       /* blocked / unsupported — the panel still works online */
     });
   }, []);

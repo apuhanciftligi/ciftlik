@@ -2,7 +2,8 @@ import "server-only";
 
 /**
  * Best-effort admin notification for a newly-placed order: an in-panel bell
- * row + (if ADMIN_NOTIFICATION_EMAIL is set) an e-mail. Called from the SAME
+ * row, its push to the admins' phones (dispatch-push.ts) + (if
+ * ADMIN_NOTIFICATION_EMAIL is set) an e-mail. Called from the SAME
  * two points the customer confirmation e-mail is sent from — COD/bank
  * transfer orders inline at placement, card orders from the PayTR webhook
  * once payment actually succeeds (features/storefront/application/
@@ -13,6 +14,7 @@ import "server-only";
  * roll back or block the order flow that just succeeded, same contract as
  * sendEmail()/logAudit().
  */
+import { schedulePushDispatch } from "@/features/admin-notifications/application/dispatch-push";
 import { buildNewOrderNotificationEmail } from "@/features/admin-notifications/domain/notification-email";
 import { insertNotification } from "@/features/admin-notifications/infrastructure/notifications.repository";
 import { env } from "@/shared/env";
@@ -41,6 +43,8 @@ export async function notifyAdminOfNewOrder(
   });
   if (!inserted.ok) {
     logger.warn({ code: inserted.error.code, orderId: input.orderId }, "new_order_notification_insert_failed");
+  } else {
+    schedulePushDispatch();
   }
 
   if (!env.ADMIN_NOTIFICATION_EMAIL) return;
