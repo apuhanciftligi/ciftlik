@@ -153,6 +153,8 @@ export interface OrderListItem {
   readonly order_number: string;
   readonly customer_id: string;
   readonly customer_name: string;
+  /** E.164, for the row's WhatsApp shortcut; null when none is on file. */
+  readonly customer_phone: string | null;
   readonly status: OrderStatus;
   readonly scheduled_for: string;
   readonly time_slot: TimeSlot | null;

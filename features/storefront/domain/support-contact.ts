@@ -8,10 +8,5 @@
 /** E.164, no separators — what wa.me actually expects. */
 export const SUPPORT_WHATSAPP_E164 = "+905332556444";
 
-/** `message` omitted opens WhatsApp with an empty composer. */
-export function buildWhatsAppLink(phoneE164: string, message?: string): string {
-  const digits = phoneE164.replace(/\D/g, "");
-  return message
-    ? `https://wa.me/${digits}?text=${encodeURIComponent(message)}`
-    : `https://wa.me/${digits}`;
-}
+/** Re-exported so storefront callers keep one import for number + link. */
+export { buildWhatsAppLink } from "@/shared/utils/whatsapp";

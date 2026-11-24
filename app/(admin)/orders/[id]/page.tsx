@@ -8,6 +8,7 @@ import {
   getOrderById,
   getOrderEvents,
 } from "@/features/orders/application/get-order";
+import { getPaymentReminder } from "@/features/orders/application/payment-reminder";
 import { getOrderPaymentsAction } from "@/features/orders/application/payments";
 import { listActiveProducts } from "@/features/products/application/list-products";
 import { OrderDetailPanel } from "@/features/orders/ui/order-detail-panel";
@@ -34,9 +35,10 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
   const products = productsResult.ok ? productsResult.value : [];
   const gifts = giftsResult.ok ? giftsResult.value : [];
 
-  const [customerResult, customerPriceMap] = await Promise.all([
+  const [customerResult, customerPriceMap, paymentReminder] = await Promise.all([
     getCustomerById(order.customer_id),
     loadCustomerProductPriceMap(order.customer_id),
+    getPaymentReminder(order),
   ]);
   const customerName = customerResult.ok
     ? `${customerResult.value.first_name} ${customerResult.value.last_name}`
@@ -57,6 +59,7 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
         customerPrices={Object.fromEntries(customerPriceMap)}
         payments={payments}
         gifts={gifts}
+        paymentReminder={paymentReminder}
       />
     </div>
   );

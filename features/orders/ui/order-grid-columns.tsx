@@ -18,6 +18,7 @@ import { textCellEditor } from "@/components/data-grid/cells/text-cell";
 import { Badge } from "@/components/ui/badge";
 import type { DataGridColumn } from "@/components/data-grid/data-grid-types";
 import { orderCellPatchSchemas } from "@/features/orders/domain/order.schema";
+import { CustomerWhatsAppLink } from "@/features/orders/ui/customer-whatsapp-link";
 import { orderStatusEditor } from "@/features/orders/ui/order-status-cell";
 import { PaymentStatusCell } from "@/features/orders/ui/payment-status-cell";
 import { formatDate } from "@/shared/utils/date";
@@ -91,13 +92,17 @@ export function buildOrderColumns(
       editable: false,
       cell: ({ row }) => {
         const name = row.original.customer_name?.trim();
+        const label = name && name.length > 0 ? name : "(isimsiz)";
         return (
-          <Link
-            href={`/customers/${row.original.customer_id}`}
-            className="text-sm underline-offset-2 hover:underline"
-          >
-            {name && name.length > 0 ? name : "(isimsiz)"}
-          </Link>
+          <div className="flex min-w-0 items-center justify-between gap-1">
+            <Link
+              href={`/customers/${row.original.customer_id}`}
+              className="truncate text-sm underline-offset-2 hover:underline"
+            >
+              {label}
+            </Link>
+            <CustomerWhatsAppLink phone={row.original.customer_phone} customerName={label} />
+          </div>
         );
       },
     },
