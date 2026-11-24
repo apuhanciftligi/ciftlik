@@ -173,3 +173,14 @@ export function nextInvoiceAttemptAt(now: Date, attempts: number): Date {
   const minutes = Math.min(5 * 2 ** Math.max(attempts - 1, 0), 360);
   return new Date(now.getTime() + minutes * 60_000);
 }
+
+/**
+ * Wait before retrying a failed cancellation (order cancelled, QNB not
+ * reached): as long as the request has already waited, between 5 minutes
+ * and 6 hours — so the waits roughly double without a counter.
+ */
+export function nextCancelAttemptAt(now: Date, requestedAt: Date): Date {
+  const waited = Math.max(now.getTime() - requestedAt.getTime(), 0);
+  const wait = Math.min(Math.max(waited, 5 * 60_000), 360 * 60_000);
+  return new Date(now.getTime() + wait);
+}

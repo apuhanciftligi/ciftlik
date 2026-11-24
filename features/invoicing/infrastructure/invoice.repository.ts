@@ -40,12 +40,13 @@ const invoiceRowSchema = z.object({
   last_error: z.string().nullable(),
   issued_at: z.string().nullable(),
   cancelled_at: z.string().nullable(),
+  cancel_requested_at: z.string().nullable(),
   created_at: z.string(),
 });
 export type InvoiceRow = z.infer<typeof invoiceRowSchema>;
 
 const INVOICE_COLUMNS =
-  "id, order_id, status, channel, invoice_number, view_url, attempts, last_error, issued_at, cancelled_at, created_at";
+  "id, order_id, status, channel, invoice_number, view_url, attempts, last_error, issued_at, cancelled_at, cancel_requested_at, created_at";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Untyped = any;
@@ -64,6 +65,19 @@ export async function claimDueInvoices(limit: number): Promise<Result<InvoiceRow
   if (!parsed.success) {
     logger.error({ issueCount: parsed.error.issues.length }, "invoice_claim_invalid_rows");
     return err(new ExternalApiError({ message: "Fatura kuyruğu okunamadı." }));
+  }
+  return ok(parsed.data);
+}
+
+/** Hand issued invoices whose order was cancelled to this worker (atomic, skip-locked). */
+export async function claimInvoiceCancellations(limit: number): Promise<Result<InvoiceRow[], ExternalApiError>> {
+  const supabase = getSupabaseAdminClient() as Untyped;
+  const { data, error } = await supabase.rpc("claim_invoice_cancellations", { p_limit: limit });
+  if (error) return dbError("invoice_cancel_claim_failed", error, {});
+  const parsed = z.array(invoiceRowSchema).safeParse(data ?? []);
+  if (!parsed.success) {
+    logger.error({ issueCount: parsed.error.issues.length }, "invoice_cancel_claim_invalid_rows");
+    return err(new ExternalApiError({ message: "Fatura iptal kuyruğu okunamadı." }));
   }
   return ok(parsed.data);
 }
@@ -197,12 +211,31 @@ export async function markInvoiceCancelled(id: string, cancelledAt: Date): Promi
   const supabase = getSupabaseAdminClient() as Untyped;
   const { data, error } = await supabase
     .from("invoices")
-    .update({ status: "cancelled", cancelled_at: cancelledAt.toISOString(), updated_at: new Date().toISOString() })
+    .update({
+      status: "cancelled",
+      cancelled_at: cancelledAt.toISOString(),
+      last_error: null,
+      locked_until: null,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", id)
     .eq("status", "issued")
     .select("id");
   if (error) return dbError("invoice_mark_cancelled_failed", error, { invoiceId: id });
   return ok((data ?? []).length > 0);
+}
+
+/** A failed cancellation: the invoice stays issued and is tried again at `nextAttemptAt`. */
+export function markInvoiceCancelFailed(
+  id: string,
+  reason: string,
+  nextAttemptAt: Date,
+): Promise<Result<void, ExternalApiError>> {
+  return updateInvoice(
+    id,
+    { last_error: reason, next_attempt_at: nextAttemptAt.toISOString() },
+    "invoice_mark_cancel_failed_failed",
+  );
 }
 
 /** A failed try: retried at `nextAttemptAt`, or parked for a human when null. */

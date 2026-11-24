@@ -29,6 +29,11 @@ vi.mock("@/features/cargo/application/aras", () => ({
   cancelArasShipmentIfSent: (...a: unknown[]) => cancelArasShipmentIfSent(...a),
 }));
 
+const scheduleInvoiceProcessing = vi.fn();
+vi.mock("@/features/invoicing/application/process-invoices", () => ({
+  scheduleInvoiceProcessing: () => scheduleInvoiceProcessing(),
+}));
+
 const { transitionOrderAs } = await import("@/features/orders/application/transition-order-as");
 
 const ID = "4f1c2b9e-8a7d-4c3b-9e2f-1a2b3c4d5e6f";
@@ -40,6 +45,7 @@ describe("transitionOrderAs", () => {
     persistTransition.mockReset();
     logAudit.mockReset();
     cancelArasShipmentIfSent.mockReset();
+    scheduleInvoiceProcessing.mockReset();
   });
 
   it("persists and audits under the explicit actor, tagging the source", async () => {
@@ -100,7 +106,7 @@ describe("transitionOrderAs", () => {
     expect(persistTransition).not.toHaveBeenCalled();
   });
 
-  it("cancels the Aras Kargo record when an order is cancelled", async () => {
+  it("cancels the Aras Kargo record and runs the invoice worker when an order is cancelled", async () => {
     findOrderById.mockResolvedValue(ok(order("confirmed")));
     persistTransition.mockResolvedValue(ok(undefined));
 
@@ -111,6 +117,8 @@ describe("transitionOrderAs", () => {
 
     expect(result.status).toBe("success");
     expect(cancelArasShipmentIfSent).toHaveBeenCalledWith({ id: "admin-7" }, ID);
+    // The DB trigger flags the invoice; the worker cancels it at QNB.
+    expect(scheduleInvoiceProcessing).toHaveBeenCalledOnce();
   });
 
   it("leaves Aras alone for any other transition", async () => {
@@ -120,5 +128,6 @@ describe("transitionOrderAs", () => {
     await transitionOrderAs({ id: "admin-7" }, { order_id: ID, to_status: "confirmed" });
 
     expect(cancelArasShipmentIfSent).not.toHaveBeenCalled();
+    expect(scheduleInvoiceProcessing).not.toHaveBeenCalled();
   });
 });
