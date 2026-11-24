@@ -161,6 +161,8 @@ export const orderListQuerySchema = z.object({
     .union([listPaymentStatusSchema, z.array(listPaymentStatusSchema).min(1).max(5)])
     .optional(),
   fulfillment_channel: z.enum(["delivery", "shipping"]).optional(),
+  /** Leave cancelled orders out (admin list default; see cancelled-visibility.ts). */
+  exclude_cancelled: z.boolean().optional(),
   scheduled_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   scheduled_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   customer_id: z.string().uuid().optional(),

@@ -17,6 +17,7 @@ import {
   getDateRangeBounds,
   isDateRangePreset,
 } from "@/features/orders/application/date-range-presets";
+import { shouldHideCancelledOrders } from "@/features/orders/domain/cancelled-visibility";
 import { GRID_PAGE_SIZE } from "@/features/orders/domain/order.schema";
 import { listOrders } from "@/features/orders/application/list-orders";
 import { listActiveProducts } from "@/features/products/application/list-products";
@@ -32,6 +33,7 @@ import { env } from "@/shared/env";
 interface OrdersPageProps {
   searchParams: Promise<{
     status?: string;
+    show_cancelled?: string;
     range?: string;
     scheduled_from?: string;
     scheduled_to?: string;
@@ -47,6 +49,7 @@ interface OrdersPageProps {
 
 const VIEW_FILTER_KEYS = [
   "status",
+  "show_cancelled",
   "range",
   "scheduled_from",
   "scheduled_to",
@@ -70,6 +73,11 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
   const [listResult, viewsResult, productsResult] = await Promise.all([
     listOrders({
       status: params.status,
+      exclude_cancelled: shouldHideCancelledOrders({
+        showCancelled: params.show_cancelled === "1",
+        status: params.status,
+        filters: currentFilters,
+      }),
       scheduled_from: presetBounds.from,
       scheduled_to: presetBounds.to,
       sort: params.sort,

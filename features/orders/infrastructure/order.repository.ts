@@ -244,6 +244,9 @@ export async function listOrders(
       ? builder.in("status", query.status)
       : builder.eq("status", query.status);
   }
+  if (query.exclude_cancelled) {
+    builder = builder.neq("status", "cancelled");
+  }
   if (query.payment_status) {
     // Uses orders_payment_status_idx; an array is OR-ed (unpaid = pending + partial).
     builder = Array.isArray(query.payment_status)
