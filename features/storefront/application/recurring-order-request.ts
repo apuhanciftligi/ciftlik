@@ -78,7 +78,7 @@ export async function createRecurringOrderRequestAction(
   }
 
   // ---- Address: must have a primary, route-aware channel derived from it ----
-  const addresses = await listMyAddresses();
+  const addresses = await listMyAddresses(user.id);
   if (!addresses.ok) {
     logger.error({ code: addresses.error.code }, "recurring_request_address_failed");
     return { status: "error", message: "Adresleriniz yüklenemedi, tekrar deneyin." };

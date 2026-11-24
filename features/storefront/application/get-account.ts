@@ -73,7 +73,7 @@ export async function getMyAccount(): Promise<CustomerAccount | null> {
     logger.warn({ code: custError.code }, "account_customer_load_failed");
   }
 
-  const addressesResult = await listMyAddresses();
+  const addressesResult = await listMyAddresses(user.id);
   const addresses = addressesResult.ok ? addressesResult.value : [];
 
   // `fulfillment_channel` isn't in the generated Database type yet (migration
