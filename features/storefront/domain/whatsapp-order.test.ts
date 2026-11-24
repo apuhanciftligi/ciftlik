@@ -38,8 +38,8 @@ describe("buildWhatsAppOrderMessage", () => {
 describe("buildWhatsAppOrderLink", () => {
   it("opens the shop's WhatsApp with the message typed in", () => {
     const link = buildWhatsAppOrderLink(LINES, 60_000);
-    expect(link.startsWith("https://wa.me/905332556444?text=")).toBe(true);
-    expect(decodeURIComponent(link.split("?text=")[1] ?? "")).toBe(
+    expect(link.startsWith("https://api.whatsapp.com/send?phone=905332556444&text=")).toBe(true);
+    expect(decodeURIComponent(link.split("&text=")[1] ?? "")).toBe(
       buildWhatsAppOrderMessage(LINES, 60_000),
     );
   });
