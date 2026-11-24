@@ -8,8 +8,9 @@
  * Sign-in is REQUIRED. A Server Action is a public HTTP endpoint no matter
  * which page calls it, and this one spends Google quota on every miss — left
  * open it is a free billing tap for anyone who finds the endpoint id
- * (CLAUDE.md §1/§10). Every surface that renders the address form is already
- * behind a session, so the check costs a real caller nothing.
+ * (CLAUDE.md §1/§10). Guest checkout renders the address form without a
+ * session; it does not call this (owner decision 2026-11-24), so a guest's pin
+ * fills no fields.
  *
  * Returns a plain serializable object — no AppError instances, no Date
  * objects (those don't always survive React's RSC payload).
