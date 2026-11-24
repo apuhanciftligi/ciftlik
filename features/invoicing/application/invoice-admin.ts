@@ -9,24 +9,32 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { assertAdmin } from "@/features/auth/application/assert-admin";
+import { MANUAL_CANCEL_REASONS } from "@/features/invoicing/domain/invoice";
 import { cancelIssuedInvoice, scheduleInvoiceProcessing } from "@/features/invoicing/application/process-invoices";
 import { getInvoice, listInvoices, requeueInvoice } from "@/features/invoicing/infrastructure/invoice.repository";
 import { logAudit } from "@/shared/audit/log-audit";
 import { ValidationError, type AppError } from "@/shared/errors/app-error";
 import { err, ok, type Result } from "@/shared/result";
 
-import type { InvoiceListRow } from "@/features/invoicing/application/invoice-types";
+import type { InvoiceListRow, InvoiceListTab } from "@/features/invoicing/application/invoice-types";
 
 // Not exported: a "use server" module may export async functions only.
 const INVOICE_PAGE_SIZE = 25;
 
 export async function listInvoicesAction(
+  rawTab: unknown,
   page: number,
-): Promise<Result<{ rows: InvoiceListRow[]; total: number; pageSize: number }, AppError>> {
+): Promise<
+  Result<
+    { rows: InvoiceListRow[]; total: number; counts: Record<InvoiceListTab, number>; pageSize: number },
+    AppError
+  >
+> {
   const auth = await assertAdmin();
   if (!auth.ok) return err(auth.error);
+  const tab: InvoiceListTab = rawTab === "cancelled" ? "cancelled" : "active";
   const safePage = Number.isInteger(page) && page >= 0 ? page : 0;
-  const res = await listInvoices(safePage, INVOICE_PAGE_SIZE);
+  const res = await listInvoices(tab, safePage, INVOICE_PAGE_SIZE);
   return res.ok ? ok({ ...res.value, pageSize: INVOICE_PAGE_SIZE }) : res;
 }
 
@@ -55,7 +63,7 @@ export async function retryInvoiceAction(raw: unknown): Promise<Result<void, App
 
 const cancelInvoiceSchema = z.object({
   invoice_id: z.string().uuid(),
-  reason: z.enum(["refund", "duplicate", "other"]),
+  reason: z.enum(MANUAL_CANCEL_REASONS),
 });
 
 /** Cancel an issued e-Arşiv invoice (refund, duplicate order, …). Irreversible. */
@@ -69,7 +77,7 @@ export async function cancelInvoiceAction(raw: unknown): Promise<Result<void, Ap
   if (!row.ok) return err(row.error);
   if (!row.value) return err(new ValidationError({ message: "Fatura bulunamadı." }));
 
-  const res = await cancelIssuedInvoice(row.value);
+  const res = await cancelIssuedInvoice(row.value, parsed.data.reason);
   if (!res.ok) return err(res.error);
   await logAudit({
     actor_id: auth.value.id,

@@ -206,3 +206,9 @@ export function invoiceProblems(doc: InvoiceDocument): string[] {
 export function isTaxId(value: string): boolean {
   return /^\d{10}$|^\d{11}$/.test(value);
 }
+
+/** Why an invoice was cancelled: by hand from /faturalar, or with its order. */
+export const INVOICE_CANCEL_REASONS = ["refund", "duplicate", "other", "order_cancelled"] as const;
+export type InvoiceCancelReason = (typeof INVOICE_CANCEL_REASONS)[number];
+/** The reasons an admin picks when cancelling by hand. */
+export const MANUAL_CANCEL_REASONS = ["refund", "duplicate", "other"] as const satisfies readonly InvoiceCancelReason[];

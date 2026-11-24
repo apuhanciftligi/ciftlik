@@ -18,7 +18,11 @@ import { ExternalApiError, ValidationError, type AppError } from "@/shared/error
 import { logger } from "@/shared/logger";
 import { err, ok, type Result } from "@/shared/result";
 
-import { chooseInvoiceChannel, type InvoiceSeller } from "@/features/invoicing/domain/invoice";
+import {
+  chooseInvoiceChannel,
+  type InvoiceCancelReason,
+  type InvoiceSeller,
+} from "@/features/invoicing/domain/invoice";
 import {
   MAX_INVOICE_ATTEMPTS,
   buildOrderInvoice,
@@ -183,7 +187,7 @@ export async function processDueInvoices(): Promise<{ processed: number; issued:
   const toCancel = await claimInvoiceCancellations(BATCH_SIZE);
   for (const row of toCancel.ok ? toCancel.value : []) {
     processed += 1;
-    const res = await cancelIssuedInvoice(row);
+    const res = await cancelIssuedInvoice(row, "order_cancelled");
     if (res.ok) {
       cancelled += 1;
       logger.info({ invoiceId: row.id, orderId: row.order_id }, "invoice_cancelled_for_cancelled_order");
@@ -207,7 +211,10 @@ export async function processDueInvoices(): Promise<{ processed: number; issued:
  * failed, or a second admin), its lookup shows the cancellation date and the
  * row is marked from that.
  */
-export async function cancelIssuedInvoice(row: InvoiceRow): Promise<Result<void, AppError>> {
+export async function cancelIssuedInvoice(
+  row: InvoiceRow,
+  reason: InvoiceCancelReason,
+): Promise<Result<void, AppError>> {
   if (row.status !== "issued" || row.channel !== "earsiv") {
     return err(new ValidationError({ message: "Yalnızca kesilmiş e-Arşiv faturası iptal edilebilir." }));
   }
@@ -221,7 +228,7 @@ export async function cancelIssuedInvoice(row: InvoiceRow): Promise<Result<void,
     logger.info({ invoiceId: row.id }, "invoice_cancel_already_done_at_qnb");
   }
 
-  const saved = await markInvoiceCancelled(row.id, new Date());
+  const saved = await markInvoiceCancelled(row.id, new Date(), reason);
   if (!saved.ok) {
     logger.error({ invoiceId: row.id }, "invoice_cancelled_at_qnb_but_not_saved");
     return err(new ExternalApiError({

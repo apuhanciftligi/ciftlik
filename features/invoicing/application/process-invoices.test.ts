@@ -47,6 +47,7 @@ const row = (attempts: number): InvoiceRow => ({
   issued_at: null,
   cancelled_at: null,
   cancel_requested_at: null,
+  cancel_reason: null,
   created_at: "2026-11-20T10:00:00Z",
 });
 
@@ -158,14 +159,14 @@ describe("cancelIssuedInvoice", () => {
 
   it("cancels at QNB, then marks the row", async () => {
     qnb.cancelEarsivInvoice.mockResolvedValue(ok(undefined));
-    expect((await cancelIssuedInvoice(issuedRow)).ok).toBe(true);
+    expect((await cancelIssuedInvoice(issuedRow, "refund")).ok).toBe(true);
     expect(qnb.cancelEarsivInvoice.mock.calls[0]?.[1]).toBe(issuedRow.id);
-    expect(repo.markInvoiceCancelled).toHaveBeenCalledWith(issuedRow.id, expect.any(Date));
+    expect(repo.markInvoiceCancelled).toHaveBeenCalledWith(issuedRow.id, expect.any(Date), "refund");
   });
 
   it("refuses anything but an issued e-Arşiv invoice, without calling QNB", async () => {
     for (const patch of [{ status: "failed" as const }, { status: "cancelled" as const }, { channel: "efatura" as const }]) {
-      expect((await cancelIssuedInvoice({ ...issuedRow, ...patch })).ok).toBe(false);
+      expect((await cancelIssuedInvoice({ ...issuedRow, ...patch }, "refund")).ok).toBe(false);
     }
     expect(qnb.cancelEarsivInvoice).not.toHaveBeenCalled();
   });
@@ -173,14 +174,14 @@ describe("cancelIssuedInvoice", () => {
   it("marks the row when QNB had already cancelled it", async () => {
     qnb.cancelEarsivInvoice.mockResolvedValue(err(new ExternalApiError({ message: "zaten iptal" })));
     qnb.findEarsivInvoice.mockResolvedValue(ok({ ...issued, cancelledAt: "2026-11-24 10:00:00" }));
-    expect((await cancelIssuedInvoice(issuedRow)).ok).toBe(true);
+    expect((await cancelIssuedInvoice(issuedRow, "refund")).ok).toBe(true);
     expect(repo.markInvoiceCancelled).toHaveBeenCalled();
   });
 
   it("keeps the row issued when QNB refuses and the invoice is not cancelled", async () => {
     qnb.cancelEarsivInvoice.mockResolvedValue(err(new ExternalApiError({ message: "QNB e-Arşiv reddetti (AE1): x" })));
     qnb.findEarsivInvoice.mockResolvedValue(ok(issued));
-    const res = await cancelIssuedInvoice(issuedRow);
+    const res = await cancelIssuedInvoice(issuedRow, "refund");
     expect(res.ok ? null : res.error.message).toBe("QNB e-Arşiv reddetti (AE1): x");
     expect(repo.markInvoiceCancelled).not.toHaveBeenCalled();
   });
@@ -204,7 +205,7 @@ describe("processDueInvoices — cancelled orders", () => {
     repo.claimInvoiceCancellations.mockResolvedValue(ok([flagged]));
     qnb.cancelEarsivInvoice.mockResolvedValue(ok(undefined));
     expect(await processDueInvoices()).toEqual({ processed: 1, issued: 0, cancelled: 1 });
-    expect(repo.markInvoiceCancelled).toHaveBeenCalledWith(flagged.id, expect.any(Date));
+    expect(repo.markInvoiceCancelled).toHaveBeenCalledWith(flagged.id, expect.any(Date), "order_cancelled");
   });
 
   it("keeps it issued and retries later when QNB cannot be reached", async () => {
