@@ -18,7 +18,11 @@ import { getSupabaseAdminClient } from "@/shared/supabase/admin";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { vatRateSchema } from "@/shared/vat";
 
-import type { InvoiceChannel } from "@/features/invoicing/domain/invoice";
+import {
+  INVOICE_CANCEL_REASONS,
+  type InvoiceCancelReason,
+  type InvoiceChannel,
+} from "@/features/invoicing/domain/invoice";
 import type { InvoiceOrder } from "@/features/invoicing/domain/order-invoice";
 
 export type InvoiceStatus =
@@ -41,12 +45,13 @@ const invoiceRowSchema = z.object({
   issued_at: z.string().nullable(),
   cancelled_at: z.string().nullable(),
   cancel_requested_at: z.string().nullable(),
+  cancel_reason: z.enum(INVOICE_CANCEL_REASONS).nullable(),
   created_at: z.string(),
 });
 export type InvoiceRow = z.infer<typeof invoiceRowSchema>;
 
 const INVOICE_COLUMNS =
-  "id, order_id, status, channel, invoice_number, view_url, attempts, last_error, issued_at, cancelled_at, cancel_requested_at, created_at";
+  "id, order_id, status, channel, invoice_number, view_url, attempts, last_error, issued_at, cancelled_at, cancel_requested_at, cancel_reason, created_at";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Untyped = any;
@@ -207,13 +212,18 @@ export function markInvoiceIssued(
  * cancelled; false when the row is no longer 'issued' (someone else
  * cancelled it first).
  */
-export async function markInvoiceCancelled(id: string, cancelledAt: Date): Promise<Result<boolean, ExternalApiError>> {
+export async function markInvoiceCancelled(
+  id: string,
+  cancelledAt: Date,
+  reason: InvoiceCancelReason,
+): Promise<Result<boolean, ExternalApiError>> {
   const supabase = getSupabaseAdminClient() as Untyped;
   const { data, error } = await supabase
     .from("invoices")
     .update({
       status: "cancelled",
       cancelled_at: cancelledAt.toISOString(),
+      cancel_reason: reason,
       last_error: null,
       locked_until: null,
       updated_at: new Date().toISOString(),
@@ -255,32 +265,125 @@ export function markInvoiceFailed(
 
 // ---- admin (session client, RLS: admins only) --------------------------------
 
-export interface InvoiceListRow extends InvoiceRow {
-  readonly order_number: string;
+/** The order behind an invoice, as the admin list shows it. */
+export interface InvoiceListOrder {
+  readonly orderNumber: string;
+  readonly orderedAt: string;
+  readonly status: string;
+  readonly totalMinor: number;
+  readonly fulfillmentChannel: "delivery" | "shipping";
+  readonly customerName: string;
+  readonly customerEmail: string | null;
+  readonly items: readonly {
+    readonly name: string;
+    /** The product's "Faturadaki adı" when it differs from `name`. */
+    readonly invoiceName: string | null;
+    readonly quantity: number;
+    readonly unitLabel: string;
+    readonly lineTotalMinor: number;
+  }[];
+  /** Latest incoming PayTR payment, if any. */
+  readonly paytrPaidAt: string | null;
 }
 
+export interface InvoiceListRow extends InvoiceRow {
+  readonly order: InvoiceListOrder;
+}
+
+/** Live invoices (queued, issued, failed …) or the cancelled ones. */
+export type InvoiceListTab = "active" | "cancelled";
+
+const listOrderSchema = z.object({
+  order_number: z.string(),
+  created_at: z.string(),
+  status: z.string(),
+  total_minor: z.coerce.number().int(),
+  fulfillment_channel: z.enum(["delivery", "shipping"]),
+  customers: z
+    .object({ first_name: z.string().nullable(), last_name: z.string().nullable(), email: z.string().nullable() })
+    .nullable(),
+  order_items: z.array(
+    z.object({
+      product_key: z.string(),
+      quantity: z.coerce.number(),
+      line_total_minor: z.coerce.number().int().nullable(),
+      product_snapshot: z.record(z.unknown()),
+      products: z.object({ invoice_name: z.string().nullable() }).nullable(),
+    }),
+  ),
+  order_payments: z.array(
+    z.object({ provider: z.string().nullable(), amount_minor: z.coerce.number(), paid_at: z.string() }),
+  ),
+});
+
+function toListOrder(o: z.infer<typeof listOrderSchema>): InvoiceListOrder {
+  const paytrPaidAt =
+    o.order_payments
+      .filter((p) => p.provider === "paytr" && p.amount_minor > 0)
+      .map((p) => p.paid_at)
+      .sort()
+      .at(-1) ?? null;
+  return {
+    orderNumber: o.order_number,
+    orderedAt: o.created_at,
+    status: o.status,
+    totalMinor: o.total_minor,
+    fulfillmentChannel: o.fulfillment_channel,
+    customerName:
+      [text(o.customers?.first_name), text(o.customers?.last_name)].filter(Boolean).join(" ") || "—",
+    customerEmail: o.customers?.email ?? null,
+    items: o.order_items.map((i) => {
+      const name = text(i.product_snapshot.display_name) || i.product_key;
+      const invoiceName = text(i.products?.invoice_name);
+      return {
+        name,
+        invoiceName: invoiceName && invoiceName !== name ? invoiceName : null,
+        quantity: i.quantity,
+        unitLabel: text(i.product_snapshot.unit_label),
+        lineTotalMinor: i.line_total_minor ?? 0,
+      };
+    }),
+    paytrPaidAt,
+  };
+}
+
+/** Embedded in one query with the invoices: no per-row fetches. */
+const LIST_ORDER_SELECT =
+  "orders(order_number, created_at, status, total_minor, fulfillment_channel, " +
+  "customers(first_name, last_name, email), " +
+  "order_items(product_key, quantity, line_total_minor, product_snapshot, products(invoice_name)), " +
+  "order_payments(provider, amount_minor, paid_at))";
+
 export async function listInvoices(
+  tab: InvoiceListTab,
   page: number,
   pageSize: number,
-): Promise<Result<{ rows: InvoiceListRow[]; total: number }, ExternalApiError>> {
+): Promise<Result<{ rows: InvoiceListRow[]; total: number; counts: Record<InvoiceListTab, number> }, ExternalApiError>> {
   const supabase = (await createSupabaseServerClient()) as Untyped;
   const from = page * pageSize;
-  const { data, error, count } = await supabase
+  let query = supabase
     .from("invoices")
-    .select(`${INVOICE_COLUMNS}, orders(order_number)`, { count: "exact" })
+    .select(`${INVOICE_COLUMNS}, ${LIST_ORDER_SELECT}`)
     .order("created_at", { ascending: false })
     .range(from, from + pageSize - 1);
-  if (error) return dbError("invoice_list_failed", error, { page });
-  const parsed = z
-    .array(invoiceRowSchema.extend({ orders: z.object({ order_number: z.string() }) }))
-    .safeParse(data ?? []);
+  query = tab === "cancelled" ? query.eq("status", "cancelled") : query.neq("status", "cancelled");
+  const [list, active, cancelled] = await Promise.all([
+    query,
+    supabase.from("invoices").select("id", { count: "exact", head: true }).neq("status", "cancelled"),
+    supabase.from("invoices").select("id", { count: "exact", head: true }).eq("status", "cancelled"),
+  ]);
+  const failed = list.error ?? active.error ?? cancelled.error;
+  if (failed) return dbError("invoice_list_failed", failed, { tab, page });
+  const parsed = z.array(invoiceRowSchema.extend({ orders: listOrderSchema })).safeParse(list.data ?? []);
   if (!parsed.success) {
-    logger.error({ issueCount: parsed.error.issues.length }, "invoice_list_invalid");
+    logger.error({ tab, issueCount: parsed.error.issues.length }, "invoice_list_invalid");
     return err(new ExternalApiError({ message: "Faturalar okunamadı." }));
   }
+  const counts = { active: active.count ?? 0, cancelled: cancelled.count ?? 0 };
   return ok({
-    rows: parsed.data.map(({ orders, ...row }) => ({ ...row, order_number: orders.order_number })),
-    total: count ?? 0,
+    rows: parsed.data.map(({ orders, ...row }) => ({ ...row, order: toListOrder(orders) })),
+    total: counts[tab],
+    counts,
   });
 }
 
