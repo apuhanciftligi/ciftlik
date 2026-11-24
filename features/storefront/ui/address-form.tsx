@@ -173,7 +173,12 @@ export function AddressForm({
           postal_code: initial.postal_code,
           description: initial.description,
         }
-      : { ...emptyFields, city: mode === "cargo" ? "" : DELIVERY_PROVINCE },
+      : // Only a route form starts on the delivery province — there it is the
+        // only valid answer. `auto` must start blank: its mode FOLLOWS the
+        // city, so a pre-filled "Malatya" kept an İstanbul customer who never
+        // touched İl in route mode, the forward geocode then pinned their real
+        // (İstanbul) door, and saving it was refused as outside the zone.
+        { ...emptyFields, city: mode === "route" ? DELIVERY_PROVINCE : "" },
   );
   const [pin, setPin] = useState<{
     lat: number;
