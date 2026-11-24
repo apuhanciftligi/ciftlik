@@ -1197,11 +1197,14 @@ export function CheckoutForm({
                     <ul className="mt-1 list-disc pl-5">
                       {missingLines.map((line) => (
                         <li key={line.text}>
-                          {/* Each line takes the customer to its field. */}
+                          {/* Each line takes the customer to its field. `block`:
+                              a button is inline-block by default, whose
+                              baseline is its LAST line, so the bullet sat
+                              beside "eksik." instead of the first line. */}
                           <button
                             type="button"
                             onClick={() => revealField(line.target, MISSING_LIST_ID)}
-                            className="text-left underline underline-offset-4"
+                            className="block w-full text-left underline underline-offset-4"
                           >
                             {line.text}
                           </button>
