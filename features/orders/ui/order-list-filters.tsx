@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
+import { parseFiltersFromQueryParam } from "@/components/data-grid/filters/filter-types";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -12,6 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { asksForCancelled } from "@/features/orders/domain/cancelled-visibility";
 
 const STATUS_LABEL: Record<string, string> = {
   all: "Tüm durumlar",
@@ -44,6 +47,13 @@ export function OrderListFilters() {
   const range = VALID_RANGES.has(rawRange) ? rawRange : "all";
   const from = params.get("scheduled_from") ?? "";
   const to = params.get("scheduled_to") ?? "";
+  // Asking for cancelled orders explicitly (Durum = İptal, or a filter rule)
+  // shows them regardless of the toggle — reflect that as on + locked.
+  const cancelledRequested = asksForCancelled({
+    status: params.get("status") ?? undefined,
+    filters: parseFiltersFromQueryParam(params.get("filter") ?? undefined),
+  });
+  const showCancelled = cancelledRequested || params.get("show_cancelled") === "1";
 
   const update = (next: URLSearchParams) => {
     // A new filter resets pagination — the user almost never wants to land
@@ -74,6 +84,13 @@ export function OrderListFilters() {
       next.delete("scheduled_from");
       next.delete("scheduled_to");
     }
+    update(next);
+  };
+
+  const setShowCancelled = (checked: boolean) => {
+    const next = new URLSearchParams(params.toString());
+    if (checked) next.set("show_cancelled", "1");
+    else next.delete("show_cancelled");
     update(next);
   };
 
@@ -119,6 +136,18 @@ export function OrderListFilters() {
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Switch
+          id="order-list-show-cancelled"
+          checked={showCancelled}
+          onCheckedChange={setShowCancelled}
+          disabled={pending || cancelledRequested}
+        />
+        <Label htmlFor="order-list-show-cancelled" className="text-xs">
+          İptal edilmiş siparişleri göster
+        </Label>
       </div>
 
       {range === "custom" ? (
