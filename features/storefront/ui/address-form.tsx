@@ -74,7 +74,15 @@ export interface CollectedAddress {
 }
 
 export interface AddressFormProps {
-  mode: "route" | "cargo";
+  /**
+   * `route` / `cargo` follow the basket at checkout. `auto` is the account
+   * address book, which has no basket: the address itself decides — route
+   * inside the delivery province, cargo out of it. Hard-coding `route` there
+   * sent an İstanbul customer's pin to the service-area check and refused the
+   * address with "teslimat bölgemizin dışında", while checkout (cargo basket)
+   * accepted the very same address.
+   */
+  mode: "route" | "cargo" | "auto";
   mapsKey: string | undefined;
   /**
    * Present when editing an address that already has values — a saved address
@@ -165,7 +173,7 @@ export function AddressForm({
           postal_code: initial.postal_code,
           description: initial.description,
         }
-      : { ...emptyFields, city: mode === "route" ? DELIVERY_PROVINCE : "" },
+      : { ...emptyFields, city: mode === "cargo" ? "" : DELIVERY_PROVINCE },
   );
   const [pin, setPin] = useState<{
     lat: number;
@@ -218,7 +226,13 @@ export function AddressForm({
     setFields((prev) => ({ ...prev, ...patch }));
 
   const hasPin = pin.lat !== 0 || pin.lng !== 0;
-  const needsPin = mode === "route";
+  const effectiveMode: "route" | "cargo" =
+    mode === "auto"
+      ? isSameProvince(fields.city, DELIVERY_PROVINCE)
+        ? "route"
+        : "cargo"
+      : mode;
+  const needsPin = effectiveMode === "route";
   // Guest checkout (onCollect set) requires all address fields, not just route mode.
   const requiresAllFields = !!onCollect;
   const doorRequired = needsPin || requiresAllFields;
@@ -519,7 +533,7 @@ export function AddressForm({
     setSaving(true);
     const result = await saveAddressAction({
       addressId: savedInitial?.id ?? null,
-      mode,
+      mode: effectiveMode,
       // Editing keeps whatever the address already was. A NEW one does not
       // claim the default: `upsert_customer_address` already promotes the very
       // first address on its own, so forcing it here only meant that adding a
