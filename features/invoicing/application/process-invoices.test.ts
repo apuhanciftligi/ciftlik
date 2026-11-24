@@ -21,12 +21,17 @@ const repo = vi.hoisted(() => ({
   loadInvoiceOrder: vi.fn(),
   markInvoiceIssued: vi.fn(),
   markInvoiceFailed: vi.fn(),
+  markInvoiceCancelled: vi.fn(),
 }));
 vi.mock("@/features/invoicing/infrastructure/invoice.repository", () => repo);
-const qnb = vi.hoisted(() => ({ createEarsivInvoice: vi.fn(), findEarsivInvoice: vi.fn() }));
+const qnb = vi.hoisted(() => ({
+  createEarsivInvoice: vi.fn(),
+  findEarsivInvoice: vi.fn(),
+  cancelEarsivInvoice: vi.fn(),
+}));
 vi.mock("@/features/invoicing/infrastructure/qnb-client", () => qnb);
 
-const { processDueInvoices } = await import("@/features/invoicing/application/process-invoices");
+const { cancelIssuedInvoice, processDueInvoices } = await import("@/features/invoicing/application/process-invoices");
 
 const row = (attempts: number): InvoiceRow => ({
   id: "6f1e2d3c-4b5a-4987-8a6b-5c4d3e2f1a0b",
@@ -38,6 +43,7 @@ const row = (attempts: number): InvoiceRow => ({
   attempts,
   last_error: null,
   issued_at: null,
+  cancelled_at: null,
   created_at: "2026-11-20T10:00:00Z",
 });
 
@@ -54,7 +60,12 @@ const order: InvoiceOrder = {
   address: { street: "Cumhuriyet Cad.", district: "Battalgazi", city: "Malatya", postalCode: null },
   items: [{ name: "Yumurta", unit: "package", quantity: 1, lineTotalMinor: 13000, vatRate: 1 }],
 };
-const issued = { invoiceNumber: "QSB2026000000001", uuid: row(1).id, viewUrl: "https://earsivtest.qnbesolutions.com.tr/x" };
+const issued = {
+  invoiceNumber: "QSB2026000000001",
+  uuid: row(1).id,
+  viewUrl: "https://earsivtest.qnbesolutions.com.tr/x",
+  cancelledAt: null,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -132,5 +143,40 @@ describe("processDueInvoices", () => {
     qnb.findEarsivInvoice.mockResolvedValue(err(new ExternalApiError({ message: "yok" })));
     await processDueInvoices();
     expect(repo.markInvoiceFailed).toHaveBeenCalledWith(row(6).id, "hata", null);
+  });
+});
+
+describe("cancelIssuedInvoice", () => {
+  const issuedRow: InvoiceRow = { ...row(1), status: "issued", channel: "earsiv", invoice_number: issued.invoiceNumber };
+
+  beforeEach(() => repo.markInvoiceCancelled.mockResolvedValue(ok(true)));
+
+  it("cancels at QNB, then marks the row", async () => {
+    qnb.cancelEarsivInvoice.mockResolvedValue(ok(undefined));
+    expect((await cancelIssuedInvoice(issuedRow)).ok).toBe(true);
+    expect(qnb.cancelEarsivInvoice.mock.calls[0]?.[1]).toBe(issuedRow.id);
+    expect(repo.markInvoiceCancelled).toHaveBeenCalledWith(issuedRow.id, expect.any(Date));
+  });
+
+  it("refuses anything but an issued e-Arşiv invoice, without calling QNB", async () => {
+    for (const patch of [{ status: "failed" as const }, { status: "cancelled" as const }, { channel: "efatura" as const }]) {
+      expect((await cancelIssuedInvoice({ ...issuedRow, ...patch })).ok).toBe(false);
+    }
+    expect(qnb.cancelEarsivInvoice).not.toHaveBeenCalled();
+  });
+
+  it("marks the row when QNB had already cancelled it", async () => {
+    qnb.cancelEarsivInvoice.mockResolvedValue(err(new ExternalApiError({ message: "zaten iptal" })));
+    qnb.findEarsivInvoice.mockResolvedValue(ok({ ...issued, cancelledAt: "2026-11-24 10:00:00" }));
+    expect((await cancelIssuedInvoice(issuedRow)).ok).toBe(true);
+    expect(repo.markInvoiceCancelled).toHaveBeenCalled();
+  });
+
+  it("keeps the row issued when QNB refuses and the invoice is not cancelled", async () => {
+    qnb.cancelEarsivInvoice.mockResolvedValue(err(new ExternalApiError({ message: "QNB e-Arşiv reddetti (AE1): x" })));
+    qnb.findEarsivInvoice.mockResolvedValue(ok(issued));
+    const res = await cancelIssuedInvoice(issuedRow);
+    expect(res.ok ? null : res.error.message).toBe("QNB e-Arşiv reddetti (AE1): x");
+    expect(repo.markInvoiceCancelled).not.toHaveBeenCalled();
   });
 });

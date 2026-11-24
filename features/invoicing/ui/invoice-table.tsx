@@ -2,19 +2,28 @@
 
 /**
  * Admin invoice list: one row per queued/issued invoice, newest first. Issued
- * rows link to QNB's viewer; failed or parked rows show the reason and a
- * "Tekrar dene" button that puts them back in the queue.
+ * rows link to QNB's viewer and can be cancelled (refund, duplicate order);
+ * failed or parked rows show the reason and a "Tekrar dene" button that puts
+ * them back in the queue.
  */
-import { ExternalLink, Loader2, RotateCw } from "lucide-react";
+import { Ban, ExternalLink, Loader2, RotateCw } from "lucide-react";
 import Link from "next/link";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { formatDateTime } from "@/shared/utils/date";
 
-import { retryInvoiceAction } from "@/features/invoicing/application/invoice-admin";
+import { cancelInvoiceAction, retryInvoiceAction } from "@/features/invoicing/application/invoice-admin";
 import type { InvoiceListRow } from "@/features/invoicing/application/invoice-types";
 
 const STATUS_LABEL: Record<InvoiceListRow["status"], string> = {
@@ -58,6 +67,86 @@ function RetryButton({ id }: { id: string }) {
   );
 }
 
+const CANCEL_REASONS = [
+  { value: "refund", label: "İade" },
+  { value: "duplicate", label: "Fazladan / mükerrer sipariş" },
+  { value: "other", label: "Başka bir sebep" },
+] as const;
+type CancelReason = (typeof CANCEL_REASONS)[number]["value"];
+
+function CancelButton({ row }: { row: InvoiceListRow }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState<CancelReason | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <>
+      <Button
+        type="button"
+        size="sm"
+        variant="destructive"
+        className="gap-1.5"
+        onClick={() => {
+          setReason(null);
+          setOpen(true);
+        }}
+      >
+        <Ban className="h-3.5 w-3.5" />
+        İptal et
+      </Button>
+      <Dialog open={open} onOpenChange={(next) => !pending && setOpen(next)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogTitle>Fatura iptal edilsin mi?</DialogTitle>
+          <DialogDescription>
+            <strong className="text-foreground">{row.invoice_number}</strong> ({row.order_number}) QNB&apos;de
+            iptal edilir ve GİB&apos;e iptal olarak bildirilir. Bu işlem geri alınamaz. Siparişe yeniden
+            fatura gerekirse elle kesilir.
+          </DialogDescription>
+          <RadioGroup
+            value={reason}
+            onValueChange={(value) => setReason(value as CancelReason)}
+            disabled={pending}
+            className="grid gap-2"
+          >
+            {CANCEL_REASONS.map((option) => (
+              <label key={option.value} className="flex items-center gap-2 text-sm">
+                <RadioGroupItem value={option.value} />
+                {option.label}
+              </label>
+            ))}
+          </RadioGroup>
+          {/* The safe answer comes first; the destructive one is spelled out. */}
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>
+              Vazgeç
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="gap-1.5"
+              disabled={pending || reason === null}
+              onClick={() =>
+                start(async () => {
+                  if (reason === null) return;
+                  const res = await cancelInvoiceAction({ invoice_id: row.id, reason });
+                  if (res.ok) {
+                    toast.success(`${row.invoice_number ?? "Fatura"} iptal edildi.`);
+                    setOpen(false);
+                  } else {
+                    toast.error(res.error.message);
+                  }
+                })
+              }
+            >
+              {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Evet, faturayı iptal et
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export function InvoiceTable({ rows }: { rows: readonly InvoiceListRow[] }) {
   if (rows.length === 0) {
     return (
@@ -82,6 +171,7 @@ export function InvoiceTable({ rows }: { rows: readonly InvoiceListRow[] }) {
             </div>
             <p className="text-xs text-muted-foreground">
               {row.issued_at ? `Kesildi: ${formatDateTime(row.issued_at)}` : `Sıraya girdi: ${formatDateTime(row.created_at)}`}
+              {row.cancelled_at ? ` · İptal edildi: ${formatDateTime(row.cancelled_at)}` : ""}
               {row.attempts > 0 && row.status !== "issued" ? ` · ${row.attempts}. deneme` : ""}
             </p>
             {row.last_error && row.status !== "issued" ? (
@@ -96,6 +186,7 @@ export function InvoiceTable({ rows }: { rows: readonly InvoiceListRow[] }) {
               </Button>
             ) : null}
             {row.status === "failed" || row.status === "needs_attention" ? <RetryButton id={row.id} /> : null}
+            {row.status === "issued" && row.channel === "earsiv" ? <CancelButton row={row} /> : null}
           </div>
         </li>
       ))}

@@ -39,12 +39,13 @@ const invoiceRowSchema = z.object({
   attempts: z.number().int(),
   last_error: z.string().nullable(),
   issued_at: z.string().nullable(),
+  cancelled_at: z.string().nullable(),
   created_at: z.string(),
 });
 export type InvoiceRow = z.infer<typeof invoiceRowSchema>;
 
 const INVOICE_COLUMNS =
-  "id, order_id, status, channel, invoice_number, view_url, attempts, last_error, issued_at, created_at";
+  "id, order_id, status, channel, invoice_number, view_url, attempts, last_error, issued_at, cancelled_at, created_at";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Untyped = any;
@@ -187,6 +188,23 @@ export function markInvoiceIssued(
   );
 }
 
+/**
+ * Record a cancellation QNB has accepted. Only an issued invoice can be
+ * cancelled; false when the row is no longer 'issued' (someone else
+ * cancelled it first).
+ */
+export async function markInvoiceCancelled(id: string, cancelledAt: Date): Promise<Result<boolean, ExternalApiError>> {
+  const supabase = getSupabaseAdminClient() as Untyped;
+  const { data, error } = await supabase
+    .from("invoices")
+    .update({ status: "cancelled", cancelled_at: cancelledAt.toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("status", "issued")
+    .select("id");
+  if (error) return dbError("invoice_mark_cancelled_failed", error, { invoiceId: id });
+  return ok((data ?? []).length > 0);
+}
+
 /** A failed try: retried at `nextAttemptAt`, or parked for a human when null. */
 export function markInvoiceFailed(
   id: string,
@@ -231,6 +249,20 @@ export async function listInvoices(
     rows: parsed.data.map(({ orders, ...row }) => ({ ...row, order_number: orders.order_number })),
     total: count ?? 0,
   });
+}
+
+/** One invoice row, or null when it does not exist (or the user is no admin). */
+export async function getInvoice(id: string): Promise<Result<InvoiceRow | null, ExternalApiError>> {
+  const supabase = (await createSupabaseServerClient()) as Untyped;
+  const { data, error } = await supabase.from("invoices").select(INVOICE_COLUMNS).eq("id", id).maybeSingle();
+  if (error) return dbError("invoice_get_failed", error, { invoiceId: id });
+  if (data === null) return ok(null);
+  const parsed = invoiceRowSchema.safeParse(data);
+  if (!parsed.success) {
+    logger.error({ invoiceId: id, issueCount: parsed.error.issues.length }, "invoice_get_invalid");
+    return err(new ExternalApiError({ message: "Fatura okunamadı." }));
+  }
+  return ok(parsed.data);
 }
 
 /** Put a failed / parked invoice back in the queue, due now. */

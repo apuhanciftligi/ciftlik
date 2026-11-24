@@ -13,7 +13,9 @@ import "server-only";
 import { after } from "next/server";
 
 import { env } from "@/shared/env";
+import { ExternalApiError, ValidationError, type AppError } from "@/shared/errors/app-error";
 import { logger } from "@/shared/logger";
+import { err, ok, type Result } from "@/shared/result";
 
 import { chooseInvoiceChannel, type InvoiceSeller } from "@/features/invoicing/domain/invoice";
 import {
@@ -26,11 +28,13 @@ import { buildUblInvoice } from "@/features/invoicing/domain/ubl";
 import {
   claimDueInvoices,
   loadInvoiceOrder,
+  markInvoiceCancelled,
   markInvoiceFailed,
   markInvoiceIssued,
   type InvoiceRow,
 } from "@/features/invoicing/infrastructure/invoice.repository";
 import {
+  cancelEarsivInvoice,
   createEarsivInvoice,
   findEarsivInvoice,
   type QnbCredentials,
@@ -164,6 +168,39 @@ export async function processDueInvoices(): Promise<{ processed: number; issued:
     logger.info({ invoiceId: row.id, orderId: row.order_id, outcome, attempt: row.attempts }, "invoice_processed");
   }
   return { processed: claimed.value.length, issued };
+}
+
+/**
+ * Cancel an issued e-Arşiv invoice at QNB (reported to GİB as cancelled),
+ * then mark the row. The order keeps its cancelled row, so the queue never
+ * invoices it again by itself; any new invoice for it is cut by hand.
+ *
+ * Safe to repeat: if QNB already cancelled it (an earlier click whose save
+ * failed, or a second admin), its lookup shows the cancellation date and the
+ * row is marked from that.
+ */
+export async function cancelIssuedInvoice(row: InvoiceRow): Promise<Result<void, AppError>> {
+  if (row.status !== "issued" || row.channel !== "earsiv") {
+    return err(new ValidationError({ message: "Yalnızca kesilmiş e-Arşiv faturası iptal edilebilir." }));
+  }
+  const config = invoicingConfig();
+  if (!config) return err(new ExternalApiError({ message: "QNB ayarları girilmemiş; fatura iptal edilemiyor." }));
+
+  const cancelled = await cancelEarsivInvoice(config.earsiv, row.id);
+  if (!cancelled.ok) {
+    const found = await findEarsivInvoice(config.earsiv, row.id);
+    if (!found.ok || found.value.cancelledAt === null) return err(cancelled.error);
+    logger.info({ invoiceId: row.id }, "invoice_cancel_already_done_at_qnb");
+  }
+
+  const saved = await markInvoiceCancelled(row.id, new Date());
+  if (!saved.ok) {
+    logger.error({ invoiceId: row.id }, "invoice_cancelled_at_qnb_but_not_saved");
+    return err(new ExternalApiError({
+      message: "Fatura QNB'de iptal edildi ama kaydedilemedi. Tekrar \"İptal et\"e basın.",
+    }));
+  }
+  return ok(undefined);
 }
 
 /**
