@@ -14,7 +14,7 @@ import {
   hidesTabBar,
   isNavItemActive,
   menuGroups,
-  settingsItem,
+  settingsItems,
   tabBarItems,
 } from "@/app/(admin)/_components/admin-nav";
 import { TextSizeRow } from "@/app/(admin)/_components/text-size-controls";
@@ -124,13 +124,16 @@ export function AdminTabBar({ userEmail }: AdminTabBarProps) {
             </MenuGroup>
 
             <MenuGroup title="Ayarlar">
-              <MenuLink
-                href={settingsItem.href}
-                label={settingsItem.label}
-                icon={settingsItem.icon}
-                active={isNavItemActive(pathname, settingsItem)}
-                onNavigate={() => setMenuOpen(false)}
-              />
+              {settingsItems.map((item) => (
+                <MenuLink
+                  key={item.href}
+                  href={item.href}
+                  label={item.label}
+                  icon={item.icon}
+                  active={isNavItemActive(pathname, item)}
+                  onNavigate={() => setMenuOpen(false)}
+                />
+              ))}
               <TextSizeRow />
               <ThemeRow />
               {/* Drop the offline route copies too — they hold customer names and
