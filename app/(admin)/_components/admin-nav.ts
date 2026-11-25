@@ -19,8 +19,8 @@ import {
 
 /**
  * Single source for the panel's destinations. The desktop sidebar, the phone
- * tab bar and the phone menu all read from here, so a new page shows up in all
- * three (a new top-level section also goes in
+ * tab bar and the phone menu all read from here, so a new page shows up in the
+ * sidebar and the phone menu (a new top-level section also goes in
  * shared/routes/admin-route-prefixes.ts — a test enforces it).
  */
 export interface AdminNavItem {
@@ -29,22 +29,31 @@ export interface AdminNavItem {
   readonly icon: LucideIcon;
   /** Active only on an exact path match (the dashboard would otherwise match everything). */
   readonly exact: boolean;
+  /** Where the page sits in the phone menu. Required, so a new page cannot be
+   *  left out of the phone menu (the way Faturalar once was). */
+  readonly menuGroup: AdminMenuGroup;
 }
 
-const PANEL: AdminNavItem = { href: "/admin", label: "Panel", icon: LayoutDashboard, exact: true };
-const TAKVIM: AdminNavItem = { href: "/takvim", label: "Takvim", icon: CalendarDays, exact: false };
-const ANIMSATICILAR: AdminNavItem = { href: "/animsaticilar", label: "Anımsatıcılar", icon: ListChecks, exact: false };
-const MUSTERILER: AdminNavItem = { href: "/customers", label: "Müşteriler", icon: Users, exact: false };
-const SIPARISLER: AdminNavItem = { href: "/orders", label: "Siparişler", icon: Package, exact: false };
-const TEKRARLANANLAR: AdminNavItem = { href: "/recurring", label: "Tekrarlananlar", icon: Repeat, exact: false };
-const URUNLER: AdminNavItem = { href: "/products", label: "Ürünler", icon: Tags, exact: false };
-const HARITA: AdminNavItem = { href: "/map", label: "Harita", icon: Map, exact: false };
-const ROTA: AdminNavItem = { href: "/routes", label: "Rota", icon: CalendarRange, exact: false };
-const KARGO: AdminNavItem = { href: "/kargo", label: "Kargo", icon: Truck, exact: false };
-const FATURALAR: AdminNavItem = { href: "/faturalar", label: "Faturalar", icon: FileText, exact: false };
-const REKLAM: AdminNavItem = { href: "/reklam", label: "Reklam", icon: Megaphone, exact: false };
-const VITRIN: AdminNavItem = { href: "/vitrin", label: "Vitrin", icon: Images, exact: false };
-const MAGAZA_AYARLARI: AdminNavItem = { href: "/magaza-ayarlari", label: "Mağaza ayarları", icon: Store, exact: false };
+/** Phone menu groups, in display order, grouped by the job being done. */
+const MENU_GROUP_TITLES = ["Günlük iş", "Planlama", "Kayıtlar", "Satış"] as const;
+
+/** "Ayarlar" is rendered separately, next to the text-size, theme and sign-out rows. */
+type AdminMenuGroup = (typeof MENU_GROUP_TITLES)[number] | "Ayarlar";
+
+const PANEL: AdminNavItem = { href: "/admin", label: "Panel", icon: LayoutDashboard, exact: true, menuGroup: "Günlük iş" };
+const TAKVIM: AdminNavItem = { href: "/takvim", label: "Takvim", icon: CalendarDays, exact: false, menuGroup: "Planlama" };
+const ANIMSATICILAR: AdminNavItem = { href: "/animsaticilar", label: "Anımsatıcılar", icon: ListChecks, exact: false, menuGroup: "Planlama" };
+const MUSTERILER: AdminNavItem = { href: "/customers", label: "Müşteriler", icon: Users, exact: false, menuGroup: "Kayıtlar" };
+const SIPARISLER: AdminNavItem = { href: "/orders", label: "Siparişler", icon: Package, exact: false, menuGroup: "Günlük iş" };
+const TEKRARLANANLAR: AdminNavItem = { href: "/recurring", label: "Tekrarlananlar", icon: Repeat, exact: false, menuGroup: "Planlama" };
+const URUNLER: AdminNavItem = { href: "/products", label: "Ürünler", icon: Tags, exact: false, menuGroup: "Kayıtlar" };
+const HARITA: AdminNavItem = { href: "/map", label: "Harita", icon: Map, exact: false, menuGroup: "Kayıtlar" };
+const ROTA: AdminNavItem = { href: "/routes", label: "Rota", icon: CalendarRange, exact: false, menuGroup: "Günlük iş" };
+const KARGO: AdminNavItem = { href: "/kargo", label: "Kargo", icon: Truck, exact: false, menuGroup: "Günlük iş" };
+const FATURALAR: AdminNavItem = { href: "/faturalar", label: "Faturalar", icon: FileText, exact: false, menuGroup: "Kayıtlar" };
+const REKLAM: AdminNavItem = { href: "/reklam", label: "Reklam", icon: Megaphone, exact: false, menuGroup: "Satış" };
+const VITRIN: AdminNavItem = { href: "/vitrin", label: "Vitrin", icon: Images, exact: false, menuGroup: "Satış" };
+const MAGAZA_AYARLARI: AdminNavItem = { href: "/magaza-ayarlari", label: "Mağaza ayarları", icon: Store, exact: false, menuGroup: "Ayarlar" };
 
 /** Desktop sidebar order (unchanged from before the phone shell existed). */
 export const navItems: readonly AdminNavItem[] = [
@@ -96,27 +105,16 @@ export const tabBarItems: readonly AdminNavItem[] = [
   MUSTERILER,
 ];
 
-/** Phone menu, grouped by the job being done rather than alphabetically. */
-export const menuGroups: readonly { readonly title: string; readonly items: readonly AdminNavItem[] }[] = [
-  {
-    title: "Günlük iş",
-    items: [PANEL, SIPARISLER, ROTA, KARGO],
-  },
-  {
-    title: "Planlama",
-    items: [TAKVIM, ANIMSATICILAR, TEKRARLANANLAR],
-  },
-  {
-    title: "Kayıtlar",
-    items: [MUSTERILER, URUNLER, HARITA],
-  },
-  {
-    title: "Satış",
-    items: [REKLAM, VITRIN],
-  },
-];
+/** Phone menu, derived from `navItems` so it always lists every page. */
+export const menuGroups: readonly { readonly title: string; readonly items: readonly AdminNavItem[] }[] =
+  MENU_GROUP_TITLES.map((title) => ({
+    title,
+    items: navItems.filter((item) => item.menuGroup === title),
+  }));
 
-export const settingsItem: AdminNavItem = MAGAZA_AYARLARI;
+export const settingsItems: readonly AdminNavItem[] = navItems.filter(
+  (item) => item.menuGroup === "Ayarlar",
+);
 
 /** The drive screen is a focused, full-height mode with its own bottom action
  *  bar ("Atla / Teslim Edildi"); the tab bar stays out of its way. */
